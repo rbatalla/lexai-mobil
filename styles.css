@@ -1,0 +1,243 @@
+/* LEXAI Mòbil — paleta calcada de lexai/config.py (C dict) */
+:root {
+  --bg-deep:     #0D0F14;
+  --bg-panel:    #13161E;
+  --bg-card:     #1A1E2A;
+  --bg-hover:    #1E2535;
+  --bg-selected: #2B1A08;
+
+  --border:      #2A3045;
+  --border-lt:   #353D58;
+
+  --orange:      #FF8C42;
+  --orange-dim:  #2B1A08;
+  --orange-lt:   #FFB07A;
+
+  --white:       #F0F4FF;
+  --white-dim:   #A8B4CC;
+
+  --green:       #3DDC84;
+  --gold:        #D4A84B;
+  --red:         #E74C3C;
+
+  --text-hi:     #F0F4FF;
+  --text-mid:    #A8B4CC;
+  --text-lo:     #6B7A9A;
+  --text-label:  #C8D4EC;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg-deep);
+  color: var(--text-hi);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+  overscroll-behavior-y: contain;
+}
+
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px 10px;
+}
+
+.brand {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.brand-title {
+  font-size: 17px; font-weight: 700; letter-spacing: 0.2px;
+}
+.brand-title .ai { color: var(--orange); }
+
+.btn-icon {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-mid);
+  border-radius: 10px;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+  cursor: pointer;
+}
+.btn-icon:active { border-color: var(--orange); color: var(--orange); }
+
+.mes-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+}
+.mes-nav button {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-hi);
+  border-radius: 10px;
+  width: 42px; height: 42px;
+  font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.mes-nav button:disabled { color: var(--text-lo); border-color: var(--border); opacity: 0.4; }
+.mes-nav button:active:not(:disabled) { border-color: var(--orange); color: var(--orange); }
+
+.mes-label {
+  flex: 1;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--orange);
+  text-transform: capitalize;
+}
+.mes-label small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-lo);
+  margin-top: 2px;
+}
+
+/* ── Cos ────────────────────────────────────────────────────────────── */
+main { flex: 1; padding: 14px 12px 90px; }
+
+.buit {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--text-mid);
+}
+.buit .icona { font-size: 44px; margin-bottom: 14px; opacity: 0.8; }
+.buit h2 { color: var(--text-hi); font-size: 18px; margin: 0 0 8px; }
+.buit p { font-size: 14px; color: var(--text-lo); margin: 0 0 20px; line-height: 1.5; }
+
+.btn-primari {
+  background: var(--orange);
+  color: #1A1200;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px; font-weight: 700;
+  padding: 13px 24px;
+  cursor: pointer;
+}
+.btn-primari:active { background: var(--orange-lt); }
+
+.seccio-titol {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 700;
+  color: var(--text-label);
+  text-transform: uppercase; letter-spacing: 0.6px;
+  margin: 18px 4px 10px;
+}
+.seccio-titol .comptador {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-mid);
+  border-radius: 20px;
+  font-size: 11px; font-weight: 700;
+  padding: 2px 9px;
+}
+.seccio-titol.pendent   { color: var(--text-label); }
+.seccio-titol.transit   { color: var(--gold); }
+.seccio-titol.comprat   { color: var(--green); }
+
+.card-llibre {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 13px 14px;
+  margin-bottom: 10px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.card-llibre.marcat {
+  border-color: var(--orange);
+  background: var(--bg-selected);
+}
+
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+
+.card-titol { font-size: 15.5px; font-weight: 700; color: var(--text-hi); line-height: 1.3; }
+.card-autor { font-size: 13px; color: var(--text-mid); margin-top: 2px; }
+
+.card-icona-cat {
+  font-size: 15px; flex-shrink: 0; margin-top: 1px;
+}
+.card-icona-cat.impulsiu  { color: var(--red); }
+.card-icona-cat.inesperat { color: var(--orange); font-weight: 700; }
+
+.card-meta {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 10px;
+}
+.pill {
+  font-size: 11.5px; font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-lt);
+  color: var(--text-label);
+  white-space: nowrap;
+}
+.pill.preu { color: var(--text-hi); }
+.pill.preu.real { color: var(--green); border-color: var(--green); }
+.pill.tenda { color: var(--text-mid); }
+.pill.data { color: var(--text-lo); }
+
+.card-bottom {
+  display: flex; justify-content: flex-end; margin-top: 10px;
+}
+.btn-marcar {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-lt);
+  color: var(--text-mid);
+  border-radius: 20px;
+  font-size: 13px; font-weight: 600;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.btn-marcar.actiu {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #1A1200;
+}
+
+/* ── Footer / barra d'import ────────────────────────────────────────── */
+.footer-import {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px; color: var(--text-lo);
+}
+.footer-import button {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-mid);
+  border-radius: 10px;
+  font-size: 12.5px; font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+#input-csv { display: none; }
+
+.toast {
+  position: fixed; left: 16px; right: 16px; bottom: 70px;
+  background: var(--bg-card);
+  border: 1px solid var(--orange);
+  color: var(--text-hi);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13.5px;
+  text-align: center;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  transition: opacity 0.3s;
+}
+.toast.oculta { opacity: 0; pointer-events: none; }

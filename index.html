@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D0F14">
+<title>LEXAI Mòbil</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="brand">
+      <div class="brand-title">LEX<span class="ai">AI</span> Mòbil</div>
+      <button class="btn-icon" id="btn-importar" title="Importar CSV" aria-label="Importar CSV">📥</button>
+    </div>
+    <div class="mes-nav" id="mes-nav" style="display:none;">
+      <button id="btn-mes-ant" aria-label="Mes anterior">‹</button>
+      <div class="mes-label" id="mes-label">—</div>
+      <button id="btn-mes-seg" aria-label="Mes següent">›</button>
+    </div>
+  </header>
+
+  <main id="main"></main>
+
+  <div class="footer-import">
+    <span id="footer-info">Cap dada carregada</span>
+    <button id="btn-importar-2">Importar CSV</button>
+  </div>
+
+  <input type="file" id="input-csv" accept=".csv,text/csv">
+  <div class="toast oculta" id="toast"></div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
