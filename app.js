@@ -333,6 +333,24 @@ function obrirSelectorFitxer() {
   document.getElementById('input-csv').click();
 }
 
+async function forcarActualitzacio() {
+  mostrarToast('Actualitzant... un moment.');
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) await reg.unregister();
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (const k of keys) await caches.delete(k);
+    }
+  } catch (e) {
+    console.warn('Error forçant actualització:', e);
+  }
+  // Recàrrega forçada des del servidor, ignorant qualsevol cosa guardada
+  window.location.reload();
+}
+
 function onFitxerSeleccionat(ev) {
   const file = ev.target.files[0];
   if (!file) return;
@@ -355,6 +373,7 @@ function init() {
   document.getElementById('btn-importar').addEventListener('click', obrirSelectorFitxer);
   document.getElementById('btn-importar-2').addEventListener('click', obrirSelectorFitxer);
   document.getElementById('btn-github-2').addEventListener('click', actualitzarDesDeGithub);
+  document.getElementById('btn-forcar-update').addEventListener('click', forcarActualitzacio);
   document.getElementById('btn-config-github').addEventListener('click', configurarUrlGithub);
   document.getElementById('input-csv').addEventListener('change', onFitxerSeleccionat);
   document.getElementById('btn-mes-ant').addEventListener('click', mesAnterior);
