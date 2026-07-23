@@ -4,6 +4,8 @@
 
 const STORAGE_KEY = 'lexaiMobil_dades_v1';
 const META_KEY = 'lexaiMobil_meta_v1';
+const GITHUB_URL_KEY = 'lexaiMobil_github_url_v1';
+const GITHUB_URL_DEFECTE = 'https://raw.githubusercontent.com/rbatalla/lexai-mobil/main/data/lexai_mobil_current_data.json';
 
 const MESOS_CA = ['Gener', 'Febrer', 'Març', 'Abril', 'Maig', 'Juny',
                    'Juliol', 'Agost', 'Setembre', 'Octubre', 'Novembre', 'Desembre'];
@@ -49,6 +51,23 @@ function desarMeta(meta) {
   try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
 }
 
+function obtenirUrlGithub() {
+  return localStorage.getItem(GITHUB_URL_KEY) || GITHUB_URL_DEFECTE;
+}
+
+function configurarUrlGithub() {
+  const actual = obtenirUrlGithub();
+  const nova = window.prompt(
+    "Adreça del fitxer JSON a GitHub (raw):",
+    actual
+  );
+  if (nova === null) return; // cancel·lat
+  const neta = nova.trim();
+  if (!neta) return;
+  localStorage.setItem(GITHUB_URL_KEY, neta);
+  mostrarToast('Adreça de GitHub desada.');
+}
+
 // ── Utilitats ─────────────────────────────────────────────────────────────
 
 function mesosDisponibles(rows) {
@@ -92,47 +111,83 @@ function mostrarToast(msg) {
 
 // ── Importació CSV ────────────────────────────────────────────────────────
 
-function importarCSV(text) {
-  const resultat = Papa.parse(text, { header: true, skipEmptyLines: true });
-  if (resultat.errors && resultat.errors.length) {
-    console.warn('Avisos en parsejar CSV:', resultat.errors);
-  }
-  const rows = resultat.data
-    .filter(r => r.titol && r.titol.trim() !== '')
+function normalitzarFiles(rawRows) {
+  return rawRows
+    .filter(r => r.titol && String(r.titol).trim() !== '')
     .map(r => ({
-      id: r.id ? String(r.id) : (r.titol + '|' + r.mes_objectiu),
+      id: r.id !== undefined && r.id !== null ? String(r.id) : (r.titol + '|' + r.mes_objectiu),
       titol: r.titol || '',
       autor: r.autor || '',
       bloc: r.bloc || '',
       categoria: r.categoria || '',
       estat: (r.estat || 'pendent').trim(),
       mes_objectiu: r.mes_objectiu || '',
-      import_previst: r.import_previst !== '' ? parseFloat(r.import_previst) : null,
-      import_real: r.import_real !== '' ? parseFloat(r.import_real) : null,
+      import_previst: (r.import_previst !== '' && r.import_previst !== null && r.import_previst !== undefined)
+        ? parseFloat(r.import_previst) : null,
+      import_real: (r.import_real !== '' && r.import_real !== null && r.import_real !== undefined)
+        ? parseFloat(r.import_real) : null,
       data_previsio: r.data_previsio || '',
       data_compra: r.data_compra || '',
       tenda: r.tenda || '',
       marcat: false,
     }));
+}
 
+function aplicarNovesDades(rows, meta) {
   if (rows.length === 0) {
-    mostrarToast('El CSV no conté cap fila vàlida.');
+    mostrarToast('No hi ha cap previsió vàlida per carregar.');
     return;
   }
-
   // Reemplaçar TOTALMENT les dades anteriors (comportament acordat)
   state.rows = rows;
   desarDades(rows);
-  desarMeta({ data_importacio: new Date().toISOString(), n: rows.length });
+  desarMeta(meta);
 
   state.mesos = mesosDisponibles(rows);
-  // Situar-se al mes actual si hi és, si no al primer disponible
   const mesActual = new Date().toISOString().slice(0, 7);
   const idxActual = state.mesos.indexOf(mesActual);
   state.mesIdx = idxActual >= 0 ? idxActual : 0;
 
-  mostrarToast(`Importades ${rows.length} previsions.`);
   render();
+}
+
+function importarCSV(text) {
+  const resultat = Papa.parse(text, { header: true, skipEmptyLines: true });
+  if (resultat.errors && resultat.errors.length) {
+    console.warn('Avisos en parsejar CSV:', resultat.errors);
+  }
+  const rows = normalitzarFiles(resultat.data);
+  mostrarToast(rows.length ? `Importades ${rows.length} previsions.` : 'El CSV no conté cap fila vàlida.');
+  aplicarNovesDades(rows, {
+    font: 'csv',
+    data_importacio: new Date().toISOString(),
+    n: rows.length,
+  });
+}
+
+async function actualitzarDesDeGithub() {
+  const url = obtenirUrlGithub();
+  mostrarToast('Descarregant des de GitHub...');
+  let dades;
+  try {
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    dades = await resp.json();
+  } catch (e) {
+    console.error('Error descarregant de GitHub:', e);
+    mostrarToast('No s\'ha pogut descarregar el fitxer. Comprova l\'adreça i la connexió.');
+    return;
+  }
+
+  const previsions = Array.isArray(dades.previsions) ? dades.previsions : [];
+  const rows = normalitzarFiles(previsions);
+  mostrarToast(rows.length ? `Actualitzades ${rows.length} previsions des de GitHub.` : 'El fitxer no conté cap previsió.');
+  aplicarNovesDades(rows, {
+    font: 'github',
+    data_importacio: new Date().toISOString(),
+    generat_el: dades.generat_el || null,
+    n: rows.length,
+  });
 }
 
 // ── Marcatge local ("el tinc a la mà") ─────────────────────────────────────
@@ -155,7 +210,12 @@ function render() {
 
   if (meta) {
     const d = new Date(meta.data_importacio);
-    footerInfo.textContent = `${meta.n} previsions · importat ${d.toLocaleDateString('ca')}`;
+    if (meta.font === 'github' && meta.generat_el) {
+      const g = new Date(meta.generat_el);
+      footerInfo.textContent = `${meta.n} previsions · generat ${g.toLocaleString('ca')}`;
+    } else {
+      footerInfo.textContent = `${meta.n} previsions · importat ${d.toLocaleDateString('ca')}`;
+    }
   } else {
     footerInfo.textContent = 'Cap dada carregada';
   }
@@ -166,11 +226,14 @@ function render() {
       <div class="buit">
         <div class="icona">📚</div>
         <h2>Encara no tens cap previsió carregada</h2>
-        <p>Genera el CSV des de LEXAI (Manteniment → Exportar per LEXAI Mòbil)
-           i importa'l aquí per veure les previsions de compra del mes.</p>
+        <p>Importa el CSV generat des de LEXAI (Manteniment → Exportar per LEXAI Mòbil),
+           o actualitza directament des de GitHub si ja tens la sincronització configurada.</p>
         <button class="btn-primari" id="btn-importar-buit">Importar CSV</button>
+        <div style="height:10px;"></div>
+        <button class="btn-marcar" id="btn-github-buit">🔄 Actualitzar des de GitHub</button>
       </div>`;
     document.getElementById('btn-importar-buit').addEventListener('click', obrirSelectorFitxer);
+    document.getElementById('btn-github-buit').addEventListener('click', actualitzarDesDeGithub);
     return;
   }
 
@@ -291,6 +354,8 @@ function init() {
 
   document.getElementById('btn-importar').addEventListener('click', obrirSelectorFitxer);
   document.getElementById('btn-importar-2').addEventListener('click', obrirSelectorFitxer);
+  document.getElementById('btn-github-2').addEventListener('click', actualitzarDesDeGithub);
+  document.getElementById('btn-config-github').addEventListener('click', configurarUrlGithub);
   document.getElementById('input-csv').addEventListener('change', onFitxerSeleccionat);
   document.getElementById('btn-mes-ant').addEventListener('click', mesAnterior);
   document.getElementById('btn-mes-seg').addEventListener('click', mesSeguent);

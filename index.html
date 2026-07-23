@@ -18,7 +18,10 @@
   <header>
     <div class="brand">
       <div class="brand-title">LEX<span class="ai">AI</span> Mòbil</div>
-      <button class="btn-icon" id="btn-importar" title="Importar CSV" aria-label="Importar CSV">📥</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-icon" id="btn-config-github" title="Configurar adreça GitHub" aria-label="Configurar adreça GitHub">⚙️</button>
+        <button class="btn-icon" id="btn-importar" title="Importar CSV" aria-label="Importar CSV">📥</button>
+      </div>
     </div>
     <div class="mes-nav" id="mes-nav" style="display:none;">
       <button id="btn-mes-ant" aria-label="Mes anterior">‹</button>
@@ -31,7 +34,10 @@
 
   <div class="footer-import">
     <span id="footer-info">Cap dada carregada</span>
-    <button id="btn-importar-2">Importar CSV</button>
+    <div style="display:flex; gap:8px;">
+      <button id="btn-github-2">🔄 GitHub</button>
+      <button id="btn-importar-2">Importar CSV</button>
+    </div>
   </div>
 
   <input type="file" id="input-csv" accept=".csv,text/csv">
