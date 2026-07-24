@@ -102,7 +102,7 @@ header {
 }
 
 /* ── Cos ────────────────────────────────────────────────────────────── */
-main { flex: 1; padding: 14px 12px 150px; }
+main { flex: 1; padding: 14px 12px 80px; }
 
 .buit {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -239,27 +239,40 @@ main { flex: 1; padding: 14px 12px 150px; }
 }
 
 /* ── Footer / barra d'import ────────────────────────────────────────── */
-.footer-import {
-  position: fixed; left: 0; right: 0; bottom: 54px;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border);
-  padding: 10px 14px;
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px;
-  font-size: 11.5px; color: var(--text-lo);
-}
-.footer-import button {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  color: var(--text-mid);
-  border-radius: 10px;
-  font-size: 12.5px; font-weight: 600;
-  padding: 8px 14px;
-  cursor: pointer;
-}
-
 .brand-title { cursor: pointer; }
 .brand-title:active { opacity: 0.7; }
+
+.dropdown-menu {
+  position: absolute; top: 46px; right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-lt);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  overflow: hidden;
+  width: 220px;
+  z-index: 30;
+}
+.dropdown-menu.oculta { display: none; }
+.dropdown-menu .opcio {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 13.5px; font-weight: 600; text-align: left;
+  color: var(--text-hi);
+  background: none; border: none; border-bottom: 1px solid var(--border);
+  cursor: pointer; font-family: inherit;
+}
+.dropdown-menu .opcio:last-child { border-bottom: none; }
+.dropdown-menu .opcio svg { color: var(--orange); flex-shrink: 0; }
+.dropdown-menu .opcio:active { background: var(--bg-hover); }
+
+.modal-separador {
+  height: 1px; background: var(--border);
+  margin: 10px 0;
+}
+.modal-linia.discreta {
+  font-size: 12px; color: var(--text-lo);
+}
 
 .btn-icon svg, .btn-marcar svg, .pill svg, .card-icona-cat svg,
 .mes-nav button svg, #btn-importar-2 svg, #btn-github-2 svg {

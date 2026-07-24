@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -22,6 +22,9 @@ const ICONES = {
   chevronDreta: '<polyline points="9 18 15 12 9 6"/>',
   chevronEsquerra: '<polyline points="15 18 9 12 15 6"/>',
   copa: '<path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 4H3v2a4 4 0 0 0 4 4"/><path d="M17 4h4v2a4 4 0 0 1-4 4"/>',
+  minimitzar: '<line x1="5" y1="19" x2="19" y2="19"/>',
+  github: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+  csv: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>',
 };
 
 function icona(nom, mida) {
@@ -261,21 +264,6 @@ function toggleMarcat(id) {
 // ── Renderització ─────────────────────────────────────────────────────────
 
 function render() {
-  const footerInfo = document.getElementById('footer-info');
-  const meta = carregarMeta();
-
-  if (meta) {
-    const d = new Date(meta.data_importacio);
-    if (meta.font === 'github' && meta.generat_el) {
-      const g = new Date(meta.generat_el);
-      footerInfo.textContent = `${meta.n} previsions · generat ${g.toLocaleString('ca')}`;
-    } else {
-      footerInfo.textContent = `${meta.n} previsions · importat ${d.toLocaleDateString('ca')}`;
-    }
-  } else {
-    footerInfo.textContent = 'Cap dada carregada';
-  }
-
   document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => {
     btn.classList.toggle('actiu', btn.getAttribute('data-tab') === state.tab);
   });
@@ -597,24 +585,6 @@ function obrirSelectorFitxer() {
   document.getElementById('input-csv').click();
 }
 
-async function forcarActualitzacio() {
-  mostrarToast('Actualitzant... un moment.');
-  try {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      for (const reg of regs) await reg.unregister();
-    }
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      for (const k of keys) await caches.delete(k);
-    }
-  } catch (e) {
-    console.warn('Error forçant actualització:', e);
-  }
-  // Recàrrega forçada des del servidor, ignorant qualsevol cosa guardada
-  window.location.reload();
-}
-
 function onFitxerSeleccionat(ev) {
   const file = ev.target.files[0];
   if (!file) return;
@@ -626,21 +596,108 @@ function onFitxerSeleccionat(ev) {
 }
 
 function injectarIconesFixes() {
-  document.getElementById('btn-importar').innerHTML = icona('importar', 19);
-  document.getElementById('btn-importar-2').innerHTML = icona('importar', 15) + ' Importar CSV';
-  document.getElementById('btn-github-2').innerHTML = icona('refrescar', 15) + ' GitHub';
+  document.getElementById('btn-importar').innerHTML = `
+    ${icona('importar', 19)}
+    <div class="dropdown-menu oculta" id="menu-importar">
+      <button class="opcio" id="opcio-github">${icona('github', 16)} Actualitzar des de GitHub</button>
+      <button class="opcio" id="opcio-csv">${icona('csv', 16)} Importar CSV</button>
+    </div>`;
   document.getElementById('btn-forcar-update').innerHTML = icona('forcar', 19);
   document.getElementById('btn-config-github').innerHTML = icona('config', 19);
+  document.getElementById('btn-minimitzar').innerHTML = icona('minimitzar', 19);
   document.getElementById('btn-mes-ant').innerHTML = icona('chevronEsquerra', 20);
   document.getElementById('btn-mes-seg').innerHTML = icona('chevronDreta', 20);
   document.getElementById('nav-previsions').innerHTML = icona('calendari', 20) + '<span>Previsions</span>';
   document.getElementById('nav-sagues').innerHTML = icona('llibre', 20) + '<span>Sagues</span>';
   document.getElementById('nav-tbr').innerHTML = icona('piles', 20) + '<span>TBR</span>';
   document.getElementById('nav-reptes').innerHTML = icona('diana', 20) + '<span>Reptes</span>';
+
+  document.getElementById('opcio-github').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    tancarMenuImportar();
+    actualitzarDesDeGithub();
+  });
+  document.getElementById('opcio-csv').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    tancarMenuImportar();
+    obrirSelectorFitxer();
+  });
+}
+
+function toggleMenuImportar(ev) {
+  ev.stopPropagation();
+  document.getElementById('menu-importar').classList.toggle('oculta');
+}
+function tancarMenuImportar() {
+  document.getElementById('menu-importar').classList.add('oculta');
+}
+
+function minimitzarApp() {
+  // Cap pàgina web pot minimitzar-se de veritat per motius de seguretat del
+  // navegador. window.blur() és el millor esforç possible; en molts mòbils
+  // no farà res perceptible — el gest d'inici d'Android segueix sent la
+  // manera fiable de fer-ho.
+  try { window.blur(); } catch (e) {}
+}
+
+async function comprovarActualitzacio() {
+  mostrarToast('Comprovant actualitzacions...');
+  try {
+    let versioAbans = null;
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      versioAbans = keys.sort().slice(-1)[0] || null;
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) await reg.unregister();
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (const k of keys) await caches.delete(k);
+    }
+    sessionStorage.setItem('lexaiMobil_versio_abans', versioAbans || '');
+  } catch (e) {
+    console.warn('Error comprovant actualització:', e);
+  }
+  window.location.reload();
+}
+
+function comprovarResultatActualitzacio() {
+  const versioAbans = sessionStorage.getItem('lexaiMobil_versio_abans');
+  if (versioAbans === null) return; // no venim d'una comprovació manual
+  sessionStorage.removeItem('lexaiMobil_versio_abans');
+  setTimeout(async () => {
+    try {
+      const keys = ('caches' in window) ? await caches.keys() : [];
+      const versioNova = keys.sort().slice(-1)[0] || '';
+      if (versioAbans && versioNova && versioAbans !== versioNova) {
+        mostrarToast(`Actualitzat: nova versió instal·lada (${versioNova}).`);
+      } else if (versioAbans && versioAbans === versioNova) {
+        mostrarToast('Ja tenies l\'última versió.');
+      } else {
+        mostrarToast('Actualització comprovada.');
+      }
+    } catch (e) {
+      mostrarToast('Actualització comprovada.');
+    }
+  }, 700);
 }
 
 function obrirModalInfo() {
   document.getElementById('modal-versio').textContent = `Versió ${APP_VERSION}`;
+  const meta = carregarMeta();
+  const nPrevisions = document.getElementById('modal-n-previsions');
+  const dataCarrega = document.getElementById('modal-data-carrega');
+  if (meta) {
+    nPrevisions.textContent = `${meta.n} previsions carregades`;
+    const d = new Date(meta.data_importacio);
+    const origen = meta.font === 'github' ? 'GitHub' : 'CSV';
+    dataCarrega.textContent = `Darrera actualització (${origen}): ${d.toLocaleString('ca')}`;
+  } else {
+    nPrevisions.textContent = 'Cap dada carregada';
+    dataCarrega.textContent = '';
+  }
   document.getElementById('modal-info').classList.remove('oculta');
 }
 function tancarModalInfo() {
@@ -662,11 +719,11 @@ function init() {
 
   injectarIconesFixes();
 
-  document.getElementById('btn-importar').addEventListener('click', obrirSelectorFitxer);
-  document.getElementById('btn-importar-2').addEventListener('click', obrirSelectorFitxer);
-  document.getElementById('btn-github-2').addEventListener('click', actualitzarDesDeGithub);
-  document.getElementById('btn-forcar-update').addEventListener('click', forcarActualitzacio);
+  document.getElementById('btn-importar').addEventListener('click', toggleMenuImportar);
+  document.addEventListener('click', tancarMenuImportar);
+  document.getElementById('btn-forcar-update').addEventListener('click', comprovarActualitzacio);
   document.getElementById('btn-config-github').addEventListener('click', configurarUrlGithub);
+  document.getElementById('btn-minimitzar').addEventListener('click', minimitzarApp);
   document.getElementById('input-csv').addEventListener('change', onFitxerSeleccionat);
   document.getElementById('btn-mes-ant').addEventListener('click', mesAnterior);
   document.getElementById('btn-mes-seg').addEventListener('click', mesSeguent);
@@ -689,6 +746,8 @@ function init() {
       console.warn('Service worker no registrat:', e);
     });
   }
+
+  comprovarResultatActualitzacio();
 }
 
 document.addEventListener('DOMContentLoaded', init);

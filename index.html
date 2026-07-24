@@ -19,9 +19,10 @@
     <div class="brand">
       <div class="brand-title" id="brand-title" role="button" tabindex="0">LEX<span class="ai">AI</span> Mòbil</div>
       <div style="display:flex; gap:8px;">
-        <button class="btn-icon" id="btn-forcar-update" title="Forçar actualització de l'app" aria-label="Forçar actualització"></button>
+        <button class="btn-icon" id="btn-importar" title="Descarregar dades" aria-label="Descarregar dades" style="position:relative;"></button>
         <button class="btn-icon" id="btn-config-github" title="Configurar adreça GitHub" aria-label="Configurar adreça GitHub"></button>
-        <button class="btn-icon" id="btn-importar" title="Importar CSV" aria-label="Importar CSV"></button>
+        <button class="btn-icon" id="btn-forcar-update" title="Forçar actualització de l'app" aria-label="Forçar actualització"></button>
+        <button class="btn-icon" id="btn-minimitzar" title="Minimitzar" aria-label="Minimitzar"></button>
       </div>
     </div>
     <div class="mes-nav" id="mes-nav" style="display:none;">
@@ -33,14 +34,6 @@
 
   <main id="main"></main>
 
-  <div class="footer-import">
-    <span id="footer-info">Cap dada carregada</span>
-    <div style="display:flex; gap:8px;">
-      <button id="btn-github-2"></button>
-      <button id="btn-importar-2"></button>
-    </div>
-  </div>
-
   <input type="file" id="input-csv" accept=".csv,text/csv">
   <div class="toast oculta" id="toast"></div>
   <div class="modal-overlay oculta" id="modal-info">
@@ -48,6 +41,9 @@
       <div class="modal-titol">LEXAI Mòbil</div>
       <div class="modal-linia" id="modal-versio">Versió —</div>
       <div class="modal-linia">Creador: Ramon Batalla</div>
+      <div class="modal-separador"></div>
+      <div class="modal-linia discreta" id="modal-n-previsions">— previsions carregades</div>
+      <div class="modal-linia discreta" id="modal-data-carrega">Darrera actualització: —</div>
       <button id="btn-tancar-modal">D'acord</button>
     </div>
   </div>
