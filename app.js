@@ -2,6 +2,32 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
+const APP_VERSION = '1.1.0';
+
+// ── Icones planes, un sol color (currentColor), sense emojis ──────────────
+const ICONES = {
+  importar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+  refrescar: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  forcar: '<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>',
+  calendari: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  botiga: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  carret: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  llibre: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>',
+  piles: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  diana: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="2"/>',
+  cantonada: '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+  llamp: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  chevronDreta: '<polyline points="9 18 15 12 9 6"/>',
+  chevronEsquerra: '<polyline points="15 18 9 12 15 6"/>',
+};
+
+function icona(nom, mida) {
+  mida = mida || 20;
+  return `<svg width="${mida}" height="${mida}" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+         `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONES[nom] || ''}</svg>`;
+}
 const STORAGE_KEY = 'lexaiMobil_dades_v1';
 const META_KEY = 'lexaiMobil_meta_v1';
 const GITHUB_URL_KEY = 'lexaiMobil_github_url_v1';
@@ -224,13 +250,13 @@ function render() {
     nav.style.display = 'none';
     main.innerHTML = `
       <div class="buit">
-        <div class="icona">📚</div>
+        <div class="icona">${icona('llibre', 40)}</div>
         <h2>Encara no tens cap previsió carregada</h2>
         <p>Importa el CSV generat des de LEXAI (Manteniment → Exportar per LEXAI Mòbil),
            o actualitza directament des de GitHub si ja tens la sincronització configurada.</p>
         <button class="btn-primari" id="btn-importar-buit">Importar CSV</button>
         <div style="height:10px;"></div>
-        <button class="btn-marcar" id="btn-github-buit">🔄 Actualitzar des de GitHub</button>
+        <button class="btn-marcar" id="btn-github-buit">${icona('refrescar', 15)} Actualitzar des de GitHub</button>
       </div>`;
     document.getElementById('btn-importar-buit').addEventListener('click', obrirSelectorFitxer);
     document.getElementById('btn-github-buit').addEventListener('click', actualitzarDesDeGithub);
@@ -246,7 +272,36 @@ function render() {
 
   const rowsDelMes = state.rows.filter(r => r.mes_objectiu === mesActual);
 
-  let html = '';
+  // Resum fix: sempre visible, independentment de si alguna secció és buida
+  const nPend = rowsDelMes.filter(r => r.estat === 'pendent').length;
+  const nTrans = rowsDelMes.filter(r => r.estat === 'transit').length;
+  const nCompr = rowsDelMes.filter(r => r.estat === 'comprat').length;
+  const eurPend = rowsDelMes.filter(r => r.estat === 'pendent').reduce((s, r) => s + (r.import_previst || 0), 0);
+  const eurTrans = rowsDelMes.filter(r => r.estat === 'transit').reduce((s, r) => s + (r.import_previst || 0), 0);
+  const eurCompr = rowsDelMes.filter(r => r.estat === 'comprat').reduce((s, r) => s + (r.import_real || r.import_previst || 0), 0);
+  const nTotal = nPend + nTrans + nCompr;
+  const eurTotal = eurPend + eurTrans + eurCompr;
+
+  let html = `
+    <div class="resum-mes">
+      <div class="resum-cel pendent">
+        <div class="n">${nPend}</div><div class="lbl">Pendents</div>
+        <div class="eur">${formatPreu(eurPend) || '—'}</div>
+      </div>
+      <div class="resum-cel transit">
+        <div class="n">${nTrans}</div><div class="lbl">Trànsit</div>
+        <div class="eur">${formatPreu(eurTrans) || '—'}</div>
+      </div>
+      <div class="resum-cel comprat">
+        <div class="n">${nCompr}</div><div class="lbl">Comprades</div>
+        <div class="eur">${formatPreu(eurCompr) || '—'}</div>
+      </div>
+      <div class="resum-cel total">
+        <div class="n">${nTotal}</div><div class="lbl">Total</div>
+        <div class="eur">${formatPreu(eurTotal) || '—'}</div>
+      </div>
+    </div>`;
+
   for (const estat of ESTAT_ORDRE) {
     const grup = rowsDelMes.filter(r => r.estat === estat);
     if (!grup.length) continue;
@@ -257,9 +312,9 @@ function render() {
     }
   }
 
-  if (!html) {
-    html = `<div class="buit" style="padding:40px 24px;">
-              <div class="icona">🗓️</div>
+  if (nTotal === 0) {
+    html += `<div class="buit" style="padding:40px 24px;">
+              <div class="icona">${icona('calendari', 40)}</div>
               <p>No hi ha cap previsió aquest mes.</p>
             </div>`;
   }
@@ -274,9 +329,9 @@ function render() {
 function renderCard(r) {
   let iconaCat = '';
   if (r.categoria === 'impulsiu') {
-    iconaCat = '<span class="card-icona-cat impulsiu" title="Compra impulsiva: no prevista">⚡</span>';
+    iconaCat = `<span class="card-icona-cat impulsiu" title="Compra impulsiva: no prevista">${icona('llamp', 16)}</span>`;
   } else if (r.categoria === 'inesperat') {
-    iconaCat = '<span class="card-icona-cat inesperat" title="Inesperat: no era del pla original">↪</span>';
+    iconaCat = `<span class="card-icona-cat inesperat" title="Inesperat: no era del pla original">${icona('cantonada', 16)}</span>`;
   }
 
   const pills = [];
@@ -290,17 +345,17 @@ function renderCard(r) {
     pills.push(`<span class="pill preu">≈ ${preuPrevist}</span>`);
   }
 
-  if (r.tenda) pills.push(`<span class="pill tenda">🏬 ${escapeHtml(r.tenda)}</span>`);
+  if (r.tenda) pills.push(`<span class="pill tenda">${icona('botiga', 13)} ${escapeHtml(r.tenda)}</span>`);
 
   const data = r.estat === 'comprat' ? formatData(r.data_compra) : formatData(r.data_previsio);
-  if (data) pills.push(`<span class="pill data">📅 ${data}</span>`);
+  if (data) pills.push(`<span class="pill data">${icona('calendari', 13)} ${data}</span>`);
 
   const marcatCard = r.marcat ? ' marcat' : '';
   const mostraToggle = r.estat !== 'comprat';
   const btnToggle = mostraToggle ? `
     <div class="card-bottom">
       <button class="btn-marcar${r.marcat ? ' actiu' : ''}" data-toggle-id="${escapeHtml(r.id)}">
-        ${r.marcat ? '✓ El tinc a la mà' : '🛒 Marcar (a la botiga)'}
+        ${r.marcat ? icona('check', 15) + ' El tinc a la mà' : icona('carret', 15) + ' Marcar (a la botiga)'}
       </button>
     </div>` : '';
 
@@ -361,6 +416,24 @@ function onFitxerSeleccionat(ev) {
   ev.target.value = ''; // permetre re-seleccionar el mateix fitxer
 }
 
+function injectarIconesFixes() {
+  document.getElementById('btn-importar').innerHTML = icona('importar', 19);
+  document.getElementById('btn-importar-2').innerHTML = icona('importar', 15) + ' Importar CSV';
+  document.getElementById('btn-github-2').innerHTML = icona('refrescar', 15) + ' GitHub';
+  document.getElementById('btn-forcar-update').innerHTML = icona('forcar', 19);
+  document.getElementById('btn-config-github').innerHTML = icona('config', 19);
+  document.getElementById('btn-mes-ant').innerHTML = icona('chevronEsquerra', 20);
+  document.getElementById('btn-mes-seg').innerHTML = icona('chevronDreta', 20);
+}
+
+function obrirModalInfo() {
+  document.getElementById('modal-versio').textContent = `Versió ${APP_VERSION}`;
+  document.getElementById('modal-info').classList.remove('oculta');
+}
+function tancarModalInfo() {
+  document.getElementById('modal-info').classList.add('oculta');
+}
+
 // ── Inicialització ────────────────────────────────────────────────────────
 
 function init() {
@@ -370,6 +443,8 @@ function init() {
   const idxActual = state.mesos.indexOf(mesActual);
   state.mesIdx = idxActual >= 0 ? idxActual : 0;
 
+  injectarIconesFixes();
+
   document.getElementById('btn-importar').addEventListener('click', obrirSelectorFitxer);
   document.getElementById('btn-importar-2').addEventListener('click', obrirSelectorFitxer);
   document.getElementById('btn-github-2').addEventListener('click', actualitzarDesDeGithub);
@@ -378,6 +453,14 @@ function init() {
   document.getElementById('input-csv').addEventListener('change', onFitxerSeleccionat);
   document.getElementById('btn-mes-ant').addEventListener('click', mesAnterior);
   document.getElementById('btn-mes-seg').addEventListener('click', mesSeguent);
+  document.getElementById('brand-title').addEventListener('click', obrirModalInfo);
+  document.getElementById('brand-title').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') obrirModalInfo();
+  });
+  document.getElementById('btn-tancar-modal').addEventListener('click', tancarModalInfo);
+  document.getElementById('modal-info').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-info') tancarModalInfo();
+  });
 
   render();
 

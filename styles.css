@@ -144,9 +144,41 @@ main { flex: 1; padding: 14px 12px 90px; }
 .seccio-titol.transit   { color: var(--gold); }
 .seccio-titol.comprat   { color: var(--green); }
 
-.card-llibre {
+/* ── Resum fix del mes ─────────────────────────────────────────────── */
+.resum-mes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.resum-cel {
   background: var(--bg-card);
   border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 6px;
+  text-align: center;
+}
+.resum-cel .n {
+  font-size: 18px; font-weight: 800; color: var(--text-hi);
+  line-height: 1.1;
+}
+.resum-cel .lbl {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+  color: var(--text-lo);
+  margin-top: 3px;
+}
+.resum-cel .eur {
+  font-size: 10.5px; color: var(--text-mid); margin-top: 2px;
+}
+.resum-cel.pendent .n { color: var(--text-label); }
+.resum-cel.transit  .n { color: var(--gold); }
+.resum-cel.comprat  .n { color: var(--green); }
+.resum-cel.total    { background: var(--bg-selected); border-color: var(--orange); }
+.resum-cel.total .n { color: var(--orange); }
+
+.card-llibre {
+  background: var(--bg-card);
+  border: 1.5px solid var(--orange);
   border-radius: 14px;
   padding: 13px 14px;
   margin-bottom: 10px;
@@ -154,6 +186,7 @@ main { flex: 1; padding: 14px 12px 90px; }
 }
 .card-llibre.marcat {
   border-color: var(--orange);
+  border-width: 2.5px;
   background: var(--bg-selected);
 }
 
@@ -222,6 +255,51 @@ main { flex: 1; padding: 14px 12px 90px; }
   border-radius: 10px;
   font-size: 12.5px; font-weight: 600;
   padding: 8px 14px;
+  cursor: pointer;
+}
+
+.brand-title { cursor: pointer; }
+.brand-title:active { opacity: 0.7; }
+
+.btn-icon svg, .btn-marcar svg, .pill svg, .card-icona-cat svg,
+.mes-nav button svg, #btn-importar-2 svg, #btn-github-2 svg {
+  vertical-align: -4px;
+}
+.pill svg { vertical-align: -3px; margin-right: 1px; }
+
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+.modal-overlay.oculta { display: none; }
+.modal-caixa {
+  background: var(--bg-card);
+  border: 1px solid var(--border-lt);
+  border-radius: 16px;
+  padding: 24px 22px;
+  width: 100%; max-width: 300px;
+  text-align: center;
+}
+.modal-titol {
+  font-size: 17px; font-weight: 800;
+  color: var(--orange);
+  margin-bottom: 10px;
+}
+.modal-linia {
+  font-size: 13.5px; color: var(--text-mid);
+  margin-bottom: 4px;
+}
+.modal-caixa button {
+  margin-top: 16px;
+  background: var(--orange);
+  color: #1A1200;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px; font-weight: 700;
+  padding: 10px 22px;
   cursor: pointer;
 }
 
