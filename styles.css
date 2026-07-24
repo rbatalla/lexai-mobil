@@ -102,7 +102,7 @@ header {
 }
 
 /* ── Cos ────────────────────────────────────────────────────────────── */
-main { flex: 1; padding: 14px 12px 90px; }
+main { flex: 1; padding: 14px 12px 150px; }
 
 .buit {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -240,10 +240,10 @@ main { flex: 1; padding: 14px 12px 90px; }
 
 /* ── Footer / barra d'import ────────────────────────────────────────── */
 .footer-import {
-  position: fixed; left: 0; right: 0; bottom: 0;
+  position: fixed; left: 0; right: 0; bottom: 54px;
   background: var(--bg-panel);
   border-top: 1px solid var(--border);
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  padding: 10px 14px;
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px;
   font-size: 11.5px; color: var(--text-lo);
@@ -319,3 +319,109 @@ main { flex: 1; padding: 14px 12px 90px; }
   transition: opacity 0.3s;
 }
 .toast.oculta { opacity: 0; pointer-events: none; }
+
+/* ── Navegació inferior (4 pestanyes) ──────────────────────────────── */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  display: flex;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
+  z-index: 20;
+}
+.bottom-nav .nav-item {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 6px 0;
+  color: var(--text-lo);
+  font-size: 10.5px; font-weight: 600;
+  background: none; border: none; cursor: pointer;
+  font-family: inherit;
+}
+.bottom-nav .nav-item.actiu { color: var(--orange); }
+
+/* ── Barres de progrés ──────────────────────────────────────────────── */
+.progress-track {
+  background: var(--bg-hover);
+  border-radius: 20px;
+  height: 8px;
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 20px;
+  background: var(--orange);
+}
+.progress-fill.verd { background: var(--green); }
+.progress-fill.vermell { background: var(--red); }
+.progress-fill.gold { background: var(--gold); }
+
+/* ── Sagues ─────────────────────────────────────────────────────────── */
+.card-saga {
+  background: var(--bg-card);
+  border: 1.5px solid var(--orange);
+  border-radius: 14px;
+  padding: 13px 14px;
+  margin-bottom: 10px;
+}
+.card-saga.completa { border-color: var(--green); }
+.saga-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.saga-nom { font-size: 15.5px; font-weight: 700; color: var(--text-hi); }
+.saga-badge {
+  font-size: 11px; font-weight: 700;
+  padding: 3px 9px; border-radius: 20px;
+  white-space: nowrap;
+  background: var(--bg-selected); color: var(--orange);
+}
+.saga-badge.completa { background: rgba(61,220,132,0.15); color: var(--green); }
+.saga-progres-txt { display:flex; justify-content:space-between; font-size:12px; color:var(--text-mid); margin-top:2px; }
+.saga-seguent {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 12.5px; color: var(--text-lo);
+}
+.saga-seguent b { color: var(--text-hi); font-weight: 600; }
+
+/* ── TBR ────────────────────────────────────────────────────────────── */
+.card-tbr {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--orange);
+  border-radius: 14px;
+  padding: 11px 14px;
+  margin-bottom: 9px;
+}
+.tbr-num {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--bg-selected); color: var(--orange);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12.5px; font-weight: 800; flex-shrink: 0;
+}
+.tbr-info { flex: 1; min-width: 0; }
+.tbr-titol { font-size: 14.5px; font-weight: 700; color: var(--text-hi); }
+.tbr-autor { font-size: 12.5px; color: var(--text-mid); margin-top: 1px; }
+.tbr-meta { display:flex; gap:6px; margin-top:6px; flex-wrap: wrap; }
+
+/* ── Objectius / Reptes ────────────────────────────────────────────── */
+.card-objectiu {
+  background: var(--bg-card);
+  border: 1.5px solid var(--orange);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.card-objectiu.assolit { border-color: var(--green); }
+.obj-top { display: flex; justify-content: space-between; align-items: baseline; }
+.obj-nom { font-size: 14.5px; font-weight: 700; color: var(--text-hi); }
+.obj-import { font-size: 13px; color: var(--text-mid); display:flex; align-items:center; gap:6px; }
+.obj-import b { color: var(--text-hi); font-weight: 700; }
+.obj-import .copa { color: var(--green); }
+.obj-detall { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-lo); margin-top: 6px; }
+.obj-detall.assolit { color: var(--green); }
+
+.copes-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg-selected); border: 1px solid var(--orange);
+  border-radius: 20px; padding: 2px 9px;
+  font-size: 12.5px; font-weight: 800; color: var(--orange);
+}

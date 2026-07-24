@@ -21,6 +21,7 @@ const ICONES = {
   llamp: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
   chevronDreta: '<polyline points="9 18 15 12 9 6"/>',
   chevronEsquerra: '<polyline points="15 18 9 12 15 6"/>',
+  copa: '<path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 4H3v2a4 4 0 0 0 4 4"/><path d="M17 4h4v2a4 4 0 0 1-4 4"/>',
 };
 
 function icona(nom, mida) {
@@ -40,26 +41,41 @@ const ESTAT_ORDRE = ['pendent', 'transit', 'comprat'];
 const ESTAT_LABEL = { pendent: 'Pendents', transit: 'En trànsit', comprat: 'Comprades' };
 
 let state = {
-  rows: [],
-  mesos: [],      // llista ordenada de 'YYYY-MM' presents a les dades
+  previsions: [],
+  sagues: [],
+  tbr: [],
+  reptes: null,   // { any, llibres_total:{objectiu,llegits}, categories:[...], comic:{...} }
+  mesos: [],      // llista ordenada de 'YYYY-MM' presents a les previsions
   mesIdx: 0,
+  tab: 'previsions',  // 'previsions' | 'sagues' | 'tbr' | 'reptes'
 };
+
+// Categories de Reptes que compten per al comptador de copes (6 en total:
+// les 4 de llibres + Còmic + Llibres-total com una copa més del conjunt).
+const REPTES_CATEGORIES_COPA = 6;
 
 // ── Persistència ──────────────────────────────────────────────────────────
 
 function carregarDades() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null };
+    const d = JSON.parse(raw);
+    return {
+      previsions: d.previsions || [],
+      sagues: d.sagues || [],
+      tbr: d.tbr || [],
+      reptes: d.reptes || null,
+    };
   } catch (e) {
     console.error('Error llegint dades locals:', e);
-    return [];
+    return { previsions: [], sagues: [], tbr: [], reptes: null };
   }
 }
 
-function desarDades(rows) {
+function desarDades(dades) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(dades));
   } catch (e) {
     console.error('Error desant dades locals:', e);
     mostrarToast('No s\'han pogut desar les dades al mòbil (espai insuficient?).');
@@ -159,17 +175,29 @@ function normalitzarFiles(rawRows) {
     }));
 }
 
-function aplicarNovesDades(rows, meta) {
-  if (rows.length === 0) {
+function aplicarNovesDades(previsionsRows, extra, meta) {
+  if (previsionsRows.length === 0 && !extra) {
     mostrarToast('No hi ha cap previsió vàlida per carregar.');
     return;
   }
-  // Reemplaçar TOTALMENT les dades anteriors (comportament acordat)
-  state.rows = rows;
-  desarDades(rows);
+  // Reemplaçar TOTALMENT les dades anteriors (comportament acordat).
+  // 'extra' (sagues/tbr/reptes) només arriba via GitHub; via CSV es manté
+  // el que ja hi hagués (el CSV només conté previsions).
+  const actual = carregarDades();
+  const noves = {
+    previsions: previsionsRows,
+    sagues: extra ? (extra.sagues || []) : actual.sagues,
+    tbr: extra ? (extra.tbr || []) : actual.tbr,
+    reptes: extra ? (extra.reptes || null) : actual.reptes,
+  };
+  state.previsions = noves.previsions;
+  state.sagues = noves.sagues;
+  state.tbr = noves.tbr;
+  state.reptes = noves.reptes;
+  desarDades(noves);
   desarMeta(meta);
 
-  state.mesos = mesosDisponibles(rows);
+  state.mesos = mesosDisponibles(state.previsions);
   const mesActual = new Date().toISOString().slice(0, 7);
   const idxActual = state.mesos.indexOf(mesActual);
   state.mesIdx = idxActual >= 0 ? idxActual : 0;
@@ -184,7 +212,7 @@ function importarCSV(text) {
   }
   const rows = normalitzarFiles(resultat.data);
   mostrarToast(rows.length ? `Importades ${rows.length} previsions.` : 'El CSV no conté cap fila vàlida.');
-  aplicarNovesDades(rows, {
+  aplicarNovesDades(rows, null, {
     font: 'csv',
     data_importacio: new Date().toISOString(),
     n: rows.length,
@@ -209,6 +237,10 @@ async function actualitzarDesDeGithub() {
   const rows = normalitzarFiles(previsions);
   mostrarToast(rows.length ? `Actualitzades ${rows.length} previsions des de GitHub.` : 'El fitxer no conté cap previsió.');
   aplicarNovesDades(rows, {
+    sagues: Array.isArray(dades.sagues) ? dades.sagues : [],
+    tbr: Array.isArray(dades.tbr) ? dades.tbr : [],
+    reptes: dades.reptes || null,
+  }, {
     font: 'github',
     data_importacio: new Date().toISOString(),
     generat_el: dades.generat_el || null,
@@ -219,18 +251,16 @@ async function actualitzarDesDeGithub() {
 // ── Marcatge local ("el tinc a la mà") ─────────────────────────────────────
 
 function toggleMarcat(id) {
-  const r = state.rows.find(x => x.id === id);
+  const r = state.previsions.find(x => x.id === id);
   if (!r) return;
   r.marcat = !r.marcat;
-  desarDades(state.rows);
+  desarDades({ previsions: state.previsions, sagues: state.sagues, tbr: state.tbr, reptes: state.reptes });
   render();
 }
 
 // ── Renderització ─────────────────────────────────────────────────────────
 
 function render() {
-  const main = document.getElementById('main');
-  const nav = document.getElementById('mes-nav');
   const footerInfo = document.getElementById('footer-info');
   const meta = carregarMeta();
 
@@ -246,7 +276,21 @@ function render() {
     footerInfo.textContent = 'Cap dada carregada';
   }
 
-  if (!state.rows.length) {
+  document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => {
+    btn.classList.toggle('actiu', btn.getAttribute('data-tab') === state.tab);
+  });
+
+  if (state.tab === 'previsions') renderPrevisions();
+  else if (state.tab === 'sagues') renderSagues();
+  else if (state.tab === 'tbr') renderTbr();
+  else if (state.tab === 'reptes') renderReptes();
+}
+
+function renderPrevisions() {
+  const main = document.getElementById('main');
+  const nav = document.getElementById('mes-nav');
+
+  if (!state.previsions.length) {
     nav.style.display = 'none';
     main.innerHTML = `
       <div class="buit">
@@ -264,13 +308,15 @@ function render() {
   }
 
   nav.style.display = 'flex';
+  document.getElementById('btn-mes-ant').style.visibility = 'visible';
+  document.getElementById('btn-mes-seg').style.visibility = 'visible';
   const mesActual = state.mesos[state.mesIdx];
   const { text, any } = formatMes(mesActual);
   document.getElementById('mes-label').innerHTML = `${text} <small>${any}</small>`;
   document.getElementById('btn-mes-ant').disabled = state.mesIdx <= 0;
   document.getElementById('btn-mes-seg').disabled = state.mesIdx >= state.mesos.length - 1;
 
-  const rowsDelMes = state.rows.filter(r => r.mes_objectiu === mesActual);
+  const rowsDelMes = state.previsions.filter(r => r.mes_objectiu === mesActual);
 
   // Resum fix: sempre visible, independentment de si alguna secció és buida
   const nPend = rowsDelMes.filter(r => r.estat === 'pendent').length;
@@ -326,6 +372,164 @@ function render() {
   });
 }
 
+// ── Sagues ──────────────────────────────────────────────────────────────
+
+function renderSagues() {
+  const main = document.getElementById('main');
+  const nav = document.getElementById('mes-nav');
+  nav.style.display = 'none';
+
+  if (!state.sagues.length) {
+    main.innerHTML = `
+      <div class="buit">
+        <div class="icona">${icona('llibre', 40)}</div>
+        <h2>Sense dades de sagues</h2>
+        <p>Aquesta secció només s'omple sincronitzant amb GitHub (el CSV manual
+           no inclou sagues).</p>
+        <button class="btn-marcar" id="btn-github-sagues">${icona('refrescar', 15)} Actualitzar des de GitHub</button>
+      </div>`;
+    document.getElementById('btn-github-sagues').addEventListener('click', actualitzarDesDeGithub);
+    return;
+  }
+
+  const enCurs = state.sagues.filter(s => !s.completa);
+  const completes = state.sagues.filter(s => s.completa);
+
+  let html = `<div class="seccio-titol" style="color:var(--text-label);">En curs
+                <span class="comptador">${enCurs.length}</span></div>`;
+  for (const s of enCurs) html += renderCardSaga(s);
+
+  if (completes.length) {
+    html += `<div class="seccio-titol comprat" style="margin-top:18px;">Completades
+                <span class="comptador">${completes.length}</span></div>`;
+    for (const s of completes) html += renderCardSaga(s);
+  }
+
+  main.innerHTML = html;
+}
+
+function renderCardSaga(s) {
+  const total = s.total_previst;
+  const pct = total ? Math.min(100, Math.round((s.llegits / total) * 100)) : 0;
+  const badgeTxt = total ? `${s.llegits} de ${total}` : `${s.llegits} llegits`;
+  const seguentHtml = (!s.completa && s.seguent_titol) ? `
+    <div class="saga-seguent">Següent a llegir: <b>${escapeHtml(s.seguent_titol)}</b>${s.seguent_autor ? ' — ' + escapeHtml(s.seguent_autor) : ''}</div>
+  ` : '';
+  return `
+    <div class="card-saga${s.completa ? ' completa' : ''}">
+      <div class="saga-top">
+        <div class="saga-nom">${escapeHtml(s.nom)}</div>
+        <span class="saga-badge${s.completa ? ' completa' : ''}">${s.completa ? icona('check', 13) + ' Completa' : badgeTxt}</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill${s.completa ? ' verd' : ''}" style="width:${pct}%"></div></div>
+      <div class="saga-progres-txt"><span>${s.llegits} llegits</span><span>${total ? (total - s.llegits) + ' pendents' : ''}</span></div>
+      ${seguentHtml}
+    </div>`;
+}
+
+// ── TBR ─────────────────────────────────────────────────────────────────
+
+function renderTbr() {
+  const main = document.getElementById('main');
+  const nav = document.getElementById('mes-nav');
+  nav.style.display = 'none';
+
+  if (!state.tbr.length) {
+    main.innerHTML = `
+      <div class="buit">
+        <div class="icona">${icona('piles', 40)}</div>
+        <h2>El TBR és buit</h2>
+        <p>Aquesta secció només s'omple sincronitzant amb GitHub (el CSV manual
+           no inclou el TBR).</p>
+        <button class="btn-marcar" id="btn-github-tbr">${icona('refrescar', 15)} Actualitzar des de GitHub</button>
+      </div>`;
+    document.getElementById('btn-github-tbr').addEventListener('click', actualitzarDesDeGithub);
+    return;
+  }
+
+  let html = `<div class="resum-mes" style="grid-template-columns: repeat(1,1fr);">
+      <div class="resum-cel total"><div class="n">${state.tbr.length}</div><div class="lbl">Llibres al TBR</div></div>
+    </div>`;
+
+  for (const t of state.tbr) {
+    html += `
+      <div class="card-tbr">
+        <div class="tbr-num">${t.posicio}</div>
+        <div class="tbr-info">
+          <div class="tbr-titol">${escapeHtml(t.titol)}</div>
+          <div class="tbr-autor">${escapeHtml(t.autor || '')}</div>
+          <div class="tbr-meta">
+            <span class="pill">${escapeHtml(t.categoria || '')}</span>
+            ${t.serie_nom ? `<span class="pill">${icona('cantonada', 12)} ${escapeHtml(t.serie_nom)}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+  main.innerHTML = html;
+}
+
+// ── Reptes ──────────────────────────────────────────────────────────────
+
+function renderReptes() {
+  const main = document.getElementById('main');
+  const nav = document.getElementById('mes-nav');
+
+  if (!state.reptes) {
+    nav.style.display = 'none';
+    main.innerHTML = `
+      <div class="buit">
+        <div class="icona">${icona('diana', 40)}</div>
+        <h2>Sense dades de reptes</h2>
+        <p>Aquesta secció només s'omple sincronitzant amb GitHub (el CSV manual
+           no inclou els reptes).</p>
+        <button class="btn-marcar" id="btn-github-reptes">${icona('refrescar', 15)} Actualitzar des de GitHub</button>
+      </div>`;
+    document.getElementById('btn-github-reptes').addEventListener('click', actualitzarDesDeGithub);
+    return;
+  }
+
+  const r = state.reptes;
+  const totes = [...r.categories, { categoria: 'comic', label: 'Còmic', ...r.comic },
+                 { categoria: 'llibres_total', label: 'Llibres (total)', ...r.llibres_total }];
+  const copesFetes = totes.filter(c => c.objectiu > 0 && c.llegits >= c.objectiu).length;
+
+  nav.style.display = 'flex';
+  document.getElementById('btn-mes-ant').style.visibility = 'hidden';
+  document.getElementById('btn-mes-seg').style.visibility = 'hidden';
+  document.getElementById('mes-label').innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:center; gap:8px;">
+      <span>Reptes</span>
+      <span class="copes-pill">${icona('copa', 14)} ${copesFetes}/${REPTES_CATEGORIES_COPA}</span>
+    </div>
+    <small>${r.any}</small>`;
+
+  let html = renderCardObjectiu('Llibres (total)', r.llibres_total.objectiu, r.llibres_total.llegits, true);
+  html += `<div class="seccio-titol" style="color:var(--text-label); margin-top:18px;">Per categoria</div>`;
+  for (const c of r.categories) {
+    html += renderCardObjectiu(c.label, c.objectiu, c.llegits, false);
+  }
+  html += `<div class="seccio-titol" style="color:var(--text-label); margin-top:18px;">Còmic (independent)</div>`;
+  html += renderCardObjectiu('Còmic', r.comic.objectiu, r.comic.llegits, false);
+
+  main.innerHTML = html;
+}
+
+function renderCardObjectiu(nom, objectiu, llegits, destacada) {
+  const pct = objectiu ? Math.min(100, Math.round((llegits / objectiu) * 100)) : 0;
+  const assolit = objectiu > 0 && llegits >= objectiu;
+  const restants = Math.max(objectiu - llegits, 0);
+  const classeBarra = assolit ? 'verd' : (pct >= 90 ? 'gold' : (destacada ? '' : 'verd'));
+  return `
+    <div class="card-objectiu${assolit ? ' assolit' : ''}"${destacada && !assolit ? ' style="border-color:var(--orange); background:var(--bg-selected);"' : ''}>
+      <div class="obj-top">
+        <div class="obj-nom">${escapeHtml(nom)}</div>
+        <div class="obj-import">${assolit ? `<span class="copa">${icona('copa', 16)}</span>` : ''}<b>${llegits}</b> / ${objectiu}</div>
+      </div>
+      <div class="progress-track"><div class="progress-fill ${classeBarra}" style="width:${pct}%"></div></div>
+      <div class="obj-detall${assolit ? ' assolit' : ''}"><span>${assolit ? '100% assolit' : pct + '%'}</span><span>${assolit ? 'Repte complert' : restants + ' pendents'}</span></div>
+    </div>`;
+}
+
 function renderCard(r) {
   let iconaCat = '';
   if (r.categoria === 'impulsiu') {
@@ -376,10 +580,15 @@ function renderCard(r) {
 // ── Navegació de mesos ──────────────────────────────────────────────────
 
 function mesAnterior() {
-  if (state.mesIdx > 0) { state.mesIdx--; render(); }
+  if (state.tab === 'previsions' && state.mesIdx > 0) { state.mesIdx--; render(); }
 }
 function mesSeguent() {
-  if (state.mesIdx < state.mesos.length - 1) { state.mesIdx++; render(); }
+  if (state.tab === 'previsions' && state.mesIdx < state.mesos.length - 1) { state.mesIdx++; render(); }
+}
+
+function canviarPestanya(tab) {
+  state.tab = tab;
+  render();
 }
 
 // ── Selector de fitxer ────────────────────────────────────────────────────
@@ -424,6 +633,10 @@ function injectarIconesFixes() {
   document.getElementById('btn-config-github').innerHTML = icona('config', 19);
   document.getElementById('btn-mes-ant').innerHTML = icona('chevronEsquerra', 20);
   document.getElementById('btn-mes-seg').innerHTML = icona('chevronDreta', 20);
+  document.getElementById('nav-previsions').innerHTML = icona('calendari', 20) + '<span>Previsions</span>';
+  document.getElementById('nav-sagues').innerHTML = icona('llibre', 20) + '<span>Sagues</span>';
+  document.getElementById('nav-tbr').innerHTML = icona('piles', 20) + '<span>TBR</span>';
+  document.getElementById('nav-reptes').innerHTML = icona('diana', 20) + '<span>Reptes</span>';
 }
 
 function obrirModalInfo() {
@@ -437,8 +650,12 @@ function tancarModalInfo() {
 // ── Inicialització ────────────────────────────────────────────────────────
 
 function init() {
-  state.rows = carregarDades();
-  state.mesos = mesosDisponibles(state.rows);
+  const dades = carregarDades();
+  state.previsions = dades.previsions;
+  state.sagues = dades.sagues;
+  state.tbr = dades.tbr;
+  state.reptes = dades.reptes;
+  state.mesos = mesosDisponibles(state.previsions);
   const mesActual = new Date().toISOString().slice(0, 7);
   const idxActual = state.mesos.indexOf(mesActual);
   state.mesIdx = idxActual >= 0 ? idxActual : 0;
@@ -453,6 +670,9 @@ function init() {
   document.getElementById('input-csv').addEventListener('change', onFitxerSeleccionat);
   document.getElementById('btn-mes-ant').addEventListener('click', mesAnterior);
   document.getElementById('btn-mes-seg').addEventListener('click', mesSeguent);
+  document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => {
+    btn.addEventListener('click', () => canviarPestanya(btn.getAttribute('data-tab')));
+  });
   document.getElementById('brand-title').addEventListener('click', obrirModalInfo);
   document.getElementById('brand-title').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') obrirModalInfo();
