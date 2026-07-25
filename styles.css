@@ -547,3 +547,34 @@ main { flex: 1; padding: 14px 12px 80px; }
   padding: 14px; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: 12px; line-height: 1.5;
 }
+
+.pomo-header-titol { display: flex; align-items: baseline; gap: 8px; }
+.pomo-comptador-avui {
+  font-size: 12px; font-weight: 700; color: var(--text-mid);
+  background: var(--bg-card); border: 1px solid var(--border-lt);
+  border-radius: 20px; padding: 2px 9px;
+}
+
+.pomo-pagina-inicial-fila {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-bottom: 14px; margin-top: -4px;
+}
+.pomo-pagina-inicial-fila label {
+  font-size: 12.5px; color: var(--text-mid);
+}
+.pomo-pagina-inicial-fila input {
+  width: 70px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-lt);
+  border-radius: 8px;
+  color: var(--text-hi);
+  font-size: 14px; font-weight: 700;
+  padding: 5px 8px;
+  text-align: center;
+}
+.pomo-pagina-inicial-fila input:disabled { opacity: 0.6; }
+.pomo-pagina-inicial-fila input:focus { border-color: var(--orange); outline: none; }
+
+.card-llibre-pomo-proj {
+  font-size: 10.5px; color: var(--orange); margin-top: 4px; font-weight: 600;
+}

@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -46,6 +46,7 @@ const GITHUB_TOKEN_KEY = 'lexaiMobil_github_token_v1';
 const POMODORO_PATH = 'data/lexai_mobil_pomodoros_pendents.json';
 const POMODORO_CONFIG_KEY = 'lexaiMobil_pomodoro_config_v1';
 const POMODORO_PENDENTS_KEY = 'lexaiMobil_pomodoro_pendents_v1';
+const POMODORO_COMPTADOR_KEY = 'lexaiMobil_pomodoro_comptador_v1';
 const POMODORO_CONFIG_DEFECTE = {
   durada_treball: 1500, durada_descans: 300, durada_desc_llarg: 900,
   so_activat: true, so_descans: false,
@@ -196,6 +197,21 @@ function afegirPomodoroPendent(sessio) {
   localStorage.setItem(POMODORO_PENDENTS_KEY, JSON.stringify(pendents));
 }
 
+function obtenirComptadorAvui() {
+  const avui = new Date().toISOString().slice(0, 10);
+  try {
+    const raw = localStorage.getItem(POMODORO_COMPTADOR_KEY);
+    const c = raw ? JSON.parse(raw) : null;
+    return (c && c.data === avui) ? c.n : 0;
+  } catch (e) { return 0; }
+}
+function incrementarComptadorAvui() {
+  const avui = new Date().toISOString().slice(0, 10);
+  const n = obtenirComptadorAvui() + 1;
+  localStorage.setItem(POMODORO_COMPTADOR_KEY, JSON.stringify({ data: avui, n }));
+  return n;
+}
+
 async function enviarPomodorosPendents() {
   const pendents = obtenirPomodorosPendents();
   if (!pendents.length) return;
@@ -262,15 +278,11 @@ function formatTemps(segons) {
 function pomoIniciar() {
   const cfg = obtenirConfigPomodoro();
   if (!pomo.enCurs) {
-    // Pàgina inicial: només la primera vegada que comença un 'treball' amb
-    // llibre triat (no en reprendre des de pausa, no en descans).
+    // La pàgina inicial ja s'ha triat/editat amb el camp en línia (preomplert
+    // en seleccionar el llibre, però totalment editable); si per algun motiu
+    // encara no hi ha valor, es deixa a 0 en lloc de bloquejar l'inici.
     if (pomo.tipus === 'treball' && pomo.llibreId && pomo.paginaInicial === null) {
-      const llibre = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
-      const suggerida = llibre ? llibre.pagina_actual : 0;
-      const resposta = window.prompt(
-        `Pàgina inicial de "${pomo.llibreTitol}":`, String(suggerida || 0));
-      if (resposta === null) return; // cancel·lat: no s'inicia
-      pomo.paginaInicial = parseInt(resposta, 10) || 0;
+      pomo.paginaInicial = 0;
     }
     pomo.enCurs = true;
     pomo.pausat = false;
@@ -298,7 +310,9 @@ function pomoTriarLlibre(id) {
     if (!llibre) return;
     pomo.llibreId = id;
     pomo.llibreTitol = llibre.titol;
-    pomo.paginaInicial = null; // es demanarà en iniciar
+    // Es preomple amb la pàgina actual del progrés, però és totalment
+    // editable abans d'iniciar (potser has avançat sense fer focus).
+    pomo.paginaInicial = llibre.pagina_actual || 0;
   }
   renderPomodoro();
 }
@@ -344,6 +358,7 @@ function pomoAcabar() {
   registrarSessioPomodoro('complet', pomo.total, paginaFinal);
   if (pomo.tipus === 'treball') {
     pomo.cicleNum = (pomo.cicleNum + 1) % 4;
+    incrementarComptadorAvui();
     if (cfg.so_activat) reproduirBeep(1);
   } else {
     if (cfg.so_descans) reproduirBeep(1);
@@ -915,8 +930,18 @@ function renderPomodoro() {
       </div>`;
   }
 
+  const llibreSeleccionat = pomo.llibreId
+    ? state.llibresEnCurs.find(l => l.id === pomo.llibreId) : null;
+  const paginaMostrada = pomo.paginaInicial !== null
+    ? pomo.paginaInicial
+    : (llibreSeleccionat ? (llibreSeleccionat.pagina_actual || 0) : 0);
   const llibreActualHtml = pomo.llibreId
-    ? `<div class="pomo-llibre-actiu">${icona('llibre', 15)} ${escapeHtml(pomo.llibreTitol)}</div>`
+    ? `<div class="pomo-llibre-actiu">${icona('llibre', 15)} ${escapeHtml(pomo.llibreTitol)}</div>
+       <div class="pomo-pagina-inicial-fila">
+         <label for="pomo-pagina-inicial">Pàgina inicial:</label>
+         <input type="number" id="pomo-pagina-inicial" min="0"
+                value="${paginaMostrada}" ${pomo.enCurs ? 'disabled' : ''}>
+       </div>`
     : '';
 
   let seccioLlibres = '';
@@ -924,12 +949,16 @@ function renderPomodoro() {
     const cards = state.llibresEnCurs.map(l => {
       const seleccionat = l.id === pomo.llibreId;
       const pct = l.pagines ? Math.min(100, Math.round((l.pagina_actual / l.pagines) * 100)) : null;
+      const extra = [];
+      if (l.pag_per_pomodoro) extra.push(`≈${l.pag_per_pomodoro} pàg/pom`);
+      if (l.pomodoros_restants) extra.push(`~${l.pomodoros_restants} pom. per acabar`);
       return `
         <button class="card-llibre-pomo${seleccionat ? ' seleccionat' : ''}"
                 data-llibre-id="${l.id}" ${pomo.enCurs ? 'disabled' : ''}>
           <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
           ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
           <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
+          ${extra.length ? `<div class="card-llibre-pomo-proj">${extra.join(' · ')}</div>` : ''}
         </button>`;
     }).join('');
     seccioLlibres = `
@@ -948,7 +977,9 @@ function renderPomodoro() {
 
   main.innerHTML = `
     <div class="pomo-header">
-      <div class="pomo-header-titol">Pomodoro</div>
+      <div class="pomo-header-titol">Pomodoro
+        <span class="pomo-comptador-avui">${obtenirComptadorAvui()} avui</span>
+      </div>
       <div style="display:flex; gap:8px;">
         <button class="btn-icon" id="pomo-btn-config-durades" title="Durades">${icona('config', 18)}</button>
         <button class="btn-icon" id="pomo-btn-config-token" title="Configurar pujada a GitHub">${icona('github', 18)}</button>
@@ -963,6 +994,14 @@ function renderPomodoro() {
       Els pomodoros fets aquí es pugen sols a GitHub (si tens el token configurat)
       i LEXAI els important en obrir o tancar el programa.
     </div>`;
+
+  const inputPagInicial = document.getElementById('pomo-pagina-inicial');
+  if (inputPagInicial) {
+    inputPagInicial.addEventListener('input', () => {
+      const v = parseInt(inputPagInicial.value, 10);
+      pomo.paginaInicial = isNaN(v) ? null : v;
+    });
+  }
 
   main.querySelectorAll('[data-llibre-id]').forEach(btn => {
     btn.addEventListener('click', () => pomoTriarLlibre(parseInt(btn.getAttribute('data-llibre-id'), 10)));
