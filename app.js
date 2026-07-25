@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -62,6 +62,7 @@ let state = {
   sagues: [],
   tbr: [],
   reptes: null,   // { any, llibres_total:{objectiu,llegits}, categories:[...], comic:{...} }
+  llibresEnCurs: [], // [{id, titol, autor, pagines, pagina_actual}]
   mesos: [],      // llista ordenada de 'YYYY-MM' presents a les previsions
   mesIdx: 0,
   tab: 'previsions',  // 'previsions' | 'sagues' | 'tbr' | 'reptes' | 'pomodoro'
@@ -85,6 +86,9 @@ let pomo = {
   dataInici: null,
   interval: null,
   esperantConfirmacio: false,  // true just despres d'acabar una fase
+  llibreId: null,              // llibre triat (opcional)
+  llibreTitol: null,
+  paginaInicial: null,
 };
 
 // ── Persistència ──────────────────────────────────────────────────────────
@@ -92,17 +96,18 @@ let pomo = {
 function carregarDades() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null };
+    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [] };
     const d = JSON.parse(raw);
     return {
       previsions: d.previsions || [],
       sagues: d.sagues || [],
       tbr: d.tbr || [],
       reptes: d.reptes || null,
+      llibresEnCurs: d.llibresEnCurs || [],
     };
   } catch (e) {
     console.error('Error llegint dades locals:', e);
-    return { previsions: [], sagues: [], tbr: [], reptes: null };
+    return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [] };
   }
 }
 
@@ -257,6 +262,16 @@ function formatTemps(segons) {
 function pomoIniciar() {
   const cfg = obtenirConfigPomodoro();
   if (!pomo.enCurs) {
+    // Pàgina inicial: només la primera vegada que comença un 'treball' amb
+    // llibre triat (no en reprendre des de pausa, no en descans).
+    if (pomo.tipus === 'treball' && pomo.llibreId && pomo.paginaInicial === null) {
+      const llibre = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
+      const suggerida = llibre ? llibre.pagina_actual : 0;
+      const resposta = window.prompt(
+        `Pàgina inicial de "${pomo.llibreTitol}":`, String(suggerida || 0));
+      if (resposta === null) return; // cancel·lat: no s'inicia
+      pomo.paginaInicial = parseInt(resposta, 10) || 0;
+    }
     pomo.enCurs = true;
     pomo.pausat = false;
     pomo.esperantConfirmacio = false;
@@ -271,6 +286,20 @@ function pomoIniciar() {
   }
   clearInterval(pomo.interval);
   pomo.interval = setInterval(pomoTick, 1000);
+  renderPomodoro();
+}
+
+function pomoTriarLlibre(id) {
+  if (pomo.enCurs) return; // no es pot canviar amb el temporitzador en marxa
+  if (pomo.llibreId === id) {
+    pomo.llibreId = null; pomo.llibreTitol = null; pomo.paginaInicial = null;
+  } else {
+    const llibre = state.llibresEnCurs.find(l => l.id === id);
+    if (!llibre) return;
+    pomo.llibreId = id;
+    pomo.llibreTitol = llibre.titol;
+    pomo.paginaInicial = null; // es demanarà en iniciar
+  }
   renderPomodoro();
 }
 
@@ -305,7 +334,14 @@ function pomoTick() {
 
 function pomoAcabar() {
   const cfg = obtenirConfigPomodoro();
-  registrarSessioPomodoro('complet', pomo.total);
+  let paginaFinal = null;
+  if (pomo.tipus === 'treball' && pomo.llibreId) {
+    const resposta = window.prompt(
+      `Pàgina final de "${pomo.llibreTitol}" (inici: ${pomo.paginaInicial}):`,
+      String(pomo.paginaInicial || 0));
+    if (resposta !== null) paginaFinal = parseInt(resposta, 10) || null;
+  }
+  registrarSessioPomodoro('complet', pomo.total, paginaFinal);
   if (pomo.tipus === 'treball') {
     pomo.cicleNum = (pomo.cicleNum + 1) % 4;
     if (cfg.so_activat) reproduirBeep(1);
@@ -317,9 +353,9 @@ function pomoAcabar() {
   renderPomodoro();
 }
 
-function registrarSessioPomodoro(estat, durada_real) {
+function registrarSessioPomodoro(estat, durada_real, paginaFinal = null) {
   const ara = new Date();
-  afegirPomodoroPendent({
+  const sessio = {
     tipus: pomo.tipus,
     data: pomo.dataInici,
     hora_inici: pomo.horaInici,
@@ -327,7 +363,13 @@ function registrarSessioPomodoro(estat, durada_real) {
     durada_prevista: pomo.total,
     durada_real: Math.max(0, durada_real),
     estat,
-  });
+  };
+  if (pomo.tipus === 'treball' && pomo.llibreId) {
+    sessio.llibre_id = pomo.llibreId;
+    sessio.pagina_inicial = pomo.paginaInicial;
+    if (paginaFinal !== null) sessio.pagina_final = paginaFinal;
+  }
+  afegirPomodoroPendent(sessio);
   enviarPomodorosPendents(); // best-effort, no bloqueja
 }
 
@@ -427,11 +469,13 @@ function aplicarNovesDades(previsionsRows, extra, meta) {
     sagues: extra ? (extra.sagues || []) : actual.sagues,
     tbr: extra ? (extra.tbr || []) : actual.tbr,
     reptes: extra ? (extra.reptes || null) : actual.reptes,
+    llibresEnCurs: extra ? (extra.llibresEnCurs || []) : (actual.llibresEnCurs || []),
   };
   state.previsions = noves.previsions;
   state.sagues = noves.sagues;
   state.tbr = noves.tbr;
   state.reptes = noves.reptes;
+  state.llibresEnCurs = noves.llibresEnCurs;
   desarDades(noves);
   desarMeta(meta);
 
@@ -488,6 +532,7 @@ async function actualitzarDesDeGithub() {
     sagues: Array.isArray(dades.sagues) ? dades.sagues : [],
     tbr: Array.isArray(dades.tbr) ? dades.tbr : [],
     reptes: dades.reptes || null,
+    llibresEnCurs: Array.isArray(dades.llibres_en_curs) ? dades.llibres_en_curs : [],
   }, {
     font: 'github',
     data_importacio: new Date().toISOString(),
@@ -870,6 +915,30 @@ function renderPomodoro() {
       </div>`;
   }
 
+  const llibreActualHtml = pomo.llibreId
+    ? `<div class="pomo-llibre-actiu">${icona('llibre', 15)} ${escapeHtml(pomo.llibreTitol)}</div>`
+    : '';
+
+  let seccioLlibres = '';
+  if (state.llibresEnCurs.length) {
+    const cards = state.llibresEnCurs.map(l => {
+      const seleccionat = l.id === pomo.llibreId;
+      const pct = l.pagines ? Math.min(100, Math.round((l.pagina_actual / l.pagines) * 100)) : null;
+      return `
+        <button class="card-llibre-pomo${seleccionat ? ' seleccionat' : ''}"
+                data-llibre-id="${l.id}" ${pomo.enCurs ? 'disabled' : ''}>
+          <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
+          ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
+          <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
+        </button>`;
+    }).join('');
+    seccioLlibres = `
+      <div class="seccio-titol" style="color:var(--text-label); margin-top:20px;">
+        Llibre (opcional) ${pomo.llibreId ? '· toca per treure la selecció' : ''}
+      </div>
+      <div class="pomo-llibres-scroll">${cards}</div>`;
+  }
+
   main.innerHTML = `
     <div class="pomo-header">
       <div class="pomo-header-titol">Pomodoro</div>
@@ -878,11 +947,19 @@ function renderPomodoro() {
         <button class="btn-icon" id="pomo-btn-config-token" title="Configurar pujada a GitHub">${icona('github', 18)}</button>
       </div>
     </div>
-    <div class="pomo-caixa">${contingutCentral}</div>
+    <div class="pomo-caixa">
+      ${llibreActualHtml}
+      ${contingutCentral}
+    </div>
+    ${seccioLlibres}
     <div class="pomo-nota">
       Els pomodoros fets aquí es pugen sols a GitHub (si tens el token configurat)
       i LEXAI els important en obrir o tancar el programa.
     </div>`;
+
+  main.querySelectorAll('[data-llibre-id]').forEach(btn => {
+    btn.addEventListener('click', () => pomoTriarLlibre(parseInt(btn.getAttribute('data-llibre-id'), 10)));
+  });
 
   const bPlay = document.getElementById('pomo-play');
   if (bPlay) bPlay.addEventListener('click', pomoIniciar);
@@ -1049,6 +1126,7 @@ function init() {
   state.sagues = dades.sagues;
   state.tbr = dades.tbr;
   state.reptes = dades.reptes;
+  state.llibresEnCurs = dades.llibresEnCurs || [];
   state.mesos = mesosDisponibles(state.previsions);
   const mesActual = new Date().toISOString().slice(0, 7);
   const idxActual = state.mesos.indexOf(mesActual);
