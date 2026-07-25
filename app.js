@@ -937,6 +937,13 @@ function renderPomodoro() {
         Llibre (opcional) ${pomo.llibreId ? '· toca per treure la selecció' : ''}
       </div>
       <div class="pomo-llibres-scroll">${cards}</div>`;
+  } else {
+    seccioLlibres = `
+      <div class="seccio-titol" style="color:var(--text-label); margin-top:20px;">Llibre (opcional)</div>
+      <div class="pomo-sense-llibres">
+        Cap llibre "Llegint" trobat. Sincronitza amb GitHub (🔄) després
+        d'haver actualitzat i tancat/sincronitzat LEXAI a l'escriptori.
+      </div>`;
   }
 
   main.innerHTML = `
