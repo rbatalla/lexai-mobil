@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -25,6 +25,10 @@ const ICONES = {
   minimitzar: '<line x1="5" y1="19" x2="19" y2="19"/>',
   github: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
   csv: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>',
+  rellotge: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  pausa: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
+  stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
 };
 
 function icona(nom, mida) {
@@ -36,6 +40,16 @@ const STORAGE_KEY = 'lexaiMobil_dades_v1';
 const META_KEY = 'lexaiMobil_meta_v1';
 const GITHUB_URL_KEY = 'lexaiMobil_github_url_v1';
 const GITHUB_URL_DEFECTE = 'https://raw.githubusercontent.com/rbatalla/lexai-mobil/main/data/lexai_mobil_current_data.json';
+const GITHUB_REPO_KEY = 'lexaiMobil_github_repo_v1';
+const GITHUB_REPO_DEFECTE = 'rbatalla/lexai-mobil';
+const GITHUB_TOKEN_KEY = 'lexaiMobil_github_token_v1';
+const POMODORO_PATH = 'data/lexai_mobil_pomodoros_pendents.json';
+const POMODORO_CONFIG_KEY = 'lexaiMobil_pomodoro_config_v1';
+const POMODORO_PENDENTS_KEY = 'lexaiMobil_pomodoro_pendents_v1';
+const POMODORO_CONFIG_DEFECTE = {
+  durada_treball: 1500, durada_descans: 300, durada_desc_llarg: 900,
+  so_activat: true, so_descans: false,
+};
 
 const MESOS_CA = ['Gener', 'Febrer', 'Març', 'Abril', 'Maig', 'Juny',
                    'Juliol', 'Agost', 'Setembre', 'Octubre', 'Novembre', 'Desembre'];
@@ -50,12 +64,28 @@ let state = {
   reptes: null,   // { any, llibres_total:{objectiu,llegits}, categories:[...], comic:{...} }
   mesos: [],      // llista ordenada de 'YYYY-MM' presents a les previsions
   mesIdx: 0,
-  tab: 'previsions',  // 'previsions' | 'sagues' | 'tbr' | 'reptes'
+  tab: 'previsions',  // 'previsions' | 'sagues' | 'tbr' | 'reptes' | 'pomodoro'
 };
 
 // Categories de Reptes que compten per al comptador de copes (6 en total:
 // les 4 de llibres + Còmic + Llibres-total com una copa més del conjunt).
 const REPTES_CATEGORIES_COPA = 6;
+
+// ── Estat del temporitzador Pomodoro (no persistit; si tanques l'app amb
+// un pomodoro en marxa, es perd — igual que passaria si perdessis el mòbil
+// de vista un moment; les sessions ja completades sí que estan desades) ──
+let pomo = {
+  tipus: 'treball',          // 'treball' | 'descans'
+  restant: 0,                // segons
+  total: 0,                  // segons
+  enCurs: false,
+  pausat: false,
+  cicleNum: 0,                // pomodoros de treball fets en aquest cicle (0-3)
+  horaInici: null,
+  dataInici: null,
+  interval: null,
+  esperantConfirmacio: false,  // true just despres d'acabar una fase
+};
 
 // ── Persistència ──────────────────────────────────────────────────────────
 
@@ -111,6 +141,211 @@ function configurarUrlGithub() {
   if (!neta) return;
   localStorage.setItem(GITHUB_URL_KEY, neta);
   mostrarToast('Adreça de GitHub desada.');
+}
+
+// ── Configuració de pujada (repo + token d'escriptura, per als pomodoros) ──
+
+function obtenirRepoGithub() {
+  return localStorage.getItem(GITHUB_REPO_KEY) || GITHUB_REPO_DEFECTE;
+}
+
+function configurarTokenGithub() {
+  const repoActual = obtenirRepoGithub();
+  const repoNou = window.prompt(
+    "Repositori de GitHub (usuari/nom) on pujar els pomodoros:", repoActual);
+  if (repoNou === null) return;
+  if (repoNou.trim()) localStorage.setItem(GITHUB_REPO_KEY, repoNou.trim());
+
+  const tokenActual = localStorage.getItem(GITHUB_TOKEN_KEY) || '';
+  const tokenNou = window.prompt(
+    "Token de GitHub amb permís d'escriptura sobre aquest repositori\n" +
+    "(es guarda només en aquest mòbil, mai al codi):",
+    tokenActual ? '••••••••' : '');
+  if (tokenNou === null) return;
+  if (tokenNou && tokenNou !== '••••••••') {
+    localStorage.setItem(GITHUB_TOKEN_KEY, tokenNou.trim());
+  }
+  mostrarToast('Configuració de pujada desada.');
+}
+
+// ── Configuració i cua de pomodoros ─────────────────────────────────────
+
+function obtenirConfigPomodoro() {
+  try {
+    const raw = localStorage.getItem(POMODORO_CONFIG_KEY);
+    return raw ? { ...POMODORO_CONFIG_DEFECTE, ...JSON.parse(raw) } : { ...POMODORO_CONFIG_DEFECTE };
+  } catch (e) { return { ...POMODORO_CONFIG_DEFECTE }; }
+}
+function desarConfigPomodoro(cfg) {
+  localStorage.setItem(POMODORO_CONFIG_KEY, JSON.stringify(cfg));
+}
+function obtenirPomodorosPendents() {
+  try {
+    const raw = localStorage.getItem(POMODORO_PENDENTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function afegirPomodoroPendent(sessio) {
+  const pendents = obtenirPomodorosPendents();
+  pendents.push(sessio);
+  localStorage.setItem(POMODORO_PENDENTS_KEY, JSON.stringify(pendents));
+}
+
+async function enviarPomodorosPendents() {
+  const pendents = obtenirPomodorosPendents();
+  if (!pendents.length) return;
+  const token = localStorage.getItem(GITHUB_TOKEN_KEY);
+  if (!token) return; // sense token configurat, es queden pendents localment
+  const repo = obtenirRepoGithub();
+  const url = `https://api.github.com/repos/${repo}/contents/${POMODORO_PATH}`;
+  try {
+    let sha = null;
+    const getResp = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    });
+    if (getResp.ok) {
+      sha = (await getResp.json()).sha;
+    } else if (getResp.status !== 404) {
+      return; // error temporal, es reintentarà en el proper trigger
+    }
+    const contingut = btoa(unescape(encodeURIComponent(JSON.stringify(pendents))));
+    const body = { message: 'LEXAI Mòbil: pomodoros pendents', content: contingut };
+    if (sha) body.sha = sha;
+    const putResp = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (putResp.ok) {
+      localStorage.removeItem(POMODORO_PENDENTS_KEY);
+    }
+  } catch (e) {
+    console.warn('Error pujant pomodoros (es reintentarà):', e);
+  }
+}
+
+// ── So (beep generat, sense fitxers externs) ────────────────────────────
+
+function reproduirBeep(repeticions = 1) {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    for (let i = 0; i < repeticions; i++) {
+      const t0 = ctx.currentTime + i * 0.5;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.3, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t0); osc.stop(t0 + 0.32);
+    }
+  } catch (e) { /* so no disponible, cap problema */ }
+  if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+}
+
+// ── Temporitzador ─────────────────────────────────────────────────────────
+
+function formatTemps(segons) {
+  const m = Math.floor(segons / 60);
+  const s = segons % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function pomoIniciar() {
+  const cfg = obtenirConfigPomodoro();
+  if (!pomo.enCurs) {
+    pomo.enCurs = true;
+    pomo.pausat = false;
+    pomo.esperantConfirmacio = false;
+    pomo.total = pomo.tipus === 'treball' ? cfg.durada_treball
+               : (pomo.cicleNum === 0 ? cfg.durada_desc_llarg : cfg.durada_descans);
+    pomo.restant = pomo.total;
+    const ara = new Date();
+    pomo.horaInici = ara.toTimeString().slice(0, 8);
+    pomo.dataInici = ara.toISOString().slice(0, 10);
+  } else if (pomo.pausat) {
+    pomo.pausat = false;
+  }
+  clearInterval(pomo.interval);
+  pomo.interval = setInterval(pomoTick, 1000);
+  renderPomodoro();
+}
+
+function pomoPausar() {
+  if (!pomo.enCurs || pomo.pausat) return;
+  pomo.pausat = true;
+  clearInterval(pomo.interval);
+  renderPomodoro();
+}
+
+function pomoAturar() {
+  if (!pomo.enCurs) return;
+  const durada_real = pomo.total - pomo.restant;
+  if (durada_real > 10) { // no val la pena desar interrupcions immediates
+    registrarSessioPomodoro('parcial', durada_real);
+  }
+  clearInterval(pomo.interval);
+  pomo = { ...pomo, enCurs: false, pausat: false, restant: 0, interval: null, esperantConfirmacio: false };
+  renderPomodoro();
+}
+
+function pomoTick() {
+  if (pomo.pausat || !pomo.enCurs) return;
+  pomo.restant--;
+  if (pomo.restant <= 0) {
+    clearInterval(pomo.interval);
+    pomoAcabar();
+    return;
+  }
+  renderPomodoro();
+}
+
+function pomoAcabar() {
+  const cfg = obtenirConfigPomodoro();
+  registrarSessioPomodoro('complet', pomo.total);
+  if (pomo.tipus === 'treball') {
+    pomo.cicleNum = (pomo.cicleNum + 1) % 4;
+    if (cfg.so_activat) reproduirBeep(1);
+  } else {
+    if (cfg.so_descans) reproduirBeep(1);
+  }
+  pomo.enCurs = false;
+  pomo.esperantConfirmacio = true;
+  renderPomodoro();
+}
+
+function registrarSessioPomodoro(estat, durada_real) {
+  const ara = new Date();
+  afegirPomodoroPendent({
+    tipus: pomo.tipus,
+    data: pomo.dataInici,
+    hora_inici: pomo.horaInici,
+    hora_fi: ara.toTimeString().slice(0, 8),
+    durada_prevista: pomo.total,
+    durada_real: Math.max(0, durada_real),
+    estat,
+  });
+  enviarPomodorosPendents(); // best-effort, no bloqueja
+}
+
+function pomoContinuarDescans() {
+  pomo.tipus = 'descans';
+  pomo.esperantConfirmacio = false;
+  pomoIniciar();
+}
+function pomoContinuarTreball() {
+  pomo.tipus = 'treball';
+  pomo.esperantConfirmacio = false;
+  pomoIniciar();
+}
+function pomoProuPerAra() {
+  pomo.esperantConfirmacio = false;
+  pomo.tipus = 'treball';
+  pomo.restant = 0;
+  renderPomodoro();
 }
 
 // ── Utilitats ─────────────────────────────────────────────────────────────
@@ -239,6 +474,16 @@ async function actualitzarDesDeGithub() {
   const previsions = Array.isArray(dades.previsions) ? dades.previsions : [];
   const rows = normalitzarFiles(previsions);
   mostrarToast(rows.length ? `Actualitzades ${rows.length} previsions des de GitHub.` : 'El fitxer no conté cap previsió.');
+
+  // Primer cop que sincronitzem: agafem la configuració de pomodoro de
+  // l'escriptori com a punt de partida (després és editable al mòbil sense
+  // que afecti l'escriptori).
+  if (!localStorage.getItem(POMODORO_CONFIG_KEY) && dades.focus_config) {
+    desarConfigPomodoro({ ...POMODORO_CONFIG_DEFECTE, ...dades.focus_config });
+  }
+  // Aprofitem que hi ha connexió per intentar pujar pomodoros pendents.
+  enviarPomodorosPendents();
+
   aplicarNovesDades(rows, {
     sagues: Array.isArray(dades.sagues) ? dades.sagues : [],
     tbr: Array.isArray(dades.tbr) ? dades.tbr : [],
@@ -272,6 +517,7 @@ function render() {
   else if (state.tab === 'sagues') renderSagues();
   else if (state.tab === 'tbr') renderTbr();
   else if (state.tab === 'reptes') renderReptes();
+  else if (state.tab === 'pomodoro') renderPomodoro();
 }
 
 function renderPrevisions() {
@@ -565,7 +811,97 @@ function renderCard(r) {
     </div>`;
 }
 
-// ── Navegació de mesos ──────────────────────────────────────────────────
+// ── Vista Pomodoro ──────────────────────────────────────────────────────
+
+function configurarDuradesPomodoro() {
+  const cfg = obtenirConfigPomodoro();
+  const t = window.prompt("Durada del treball (minuts):", Math.round(cfg.durada_treball / 60));
+  if (t === null) return;
+  const d = window.prompt("Durada del descans curt (minuts):", Math.round(cfg.durada_descans / 60));
+  if (d === null) return;
+  const dl = window.prompt("Durada del descans llarg, cada 4 (minuts):", Math.round(cfg.durada_desc_llarg / 60));
+  if (dl === null) return;
+  const nt = parseInt(t, 10), nd = parseInt(d, 10), ndl = parseInt(dl, 10);
+  if (nt > 0) cfg.durada_treball = nt * 60;
+  if (nd > 0) cfg.durada_descans = nd * 60;
+  if (ndl > 0) cfg.durada_desc_llarg = ndl * 60;
+  desarConfigPomodoro(cfg);
+  mostrarToast('Durades del pomodoro desades.');
+  if (!pomo.enCurs) renderPomodoro();
+}
+
+function renderPomodoro() {
+  const main = document.getElementById('main');
+  const nav = document.getElementById('mes-nav');
+  nav.style.display = 'none';
+
+  const cfg = obtenirConfigPomodoro();
+  const colorTipus = pomo.tipus === 'treball' ? 'var(--orange)' : 'var(--green)';
+  const etiquetaTipus = pomo.tipus === 'treball' ? 'Treball' : 'Descans';
+
+  const punts = [0, 1, 2, 3].map(i =>
+    `<span style="display:inline-block; width:9px; height:9px; border-radius:50%; margin:0 3px;
+       background:${i < pomo.cicleNum ? 'var(--orange)' : 'var(--border-lt)'};"></span>`).join('');
+
+  let contingutCentral;
+  if (pomo.esperantConfirmacio) {
+    const acabatTreball = pomo.tipus === 'treball';
+    contingutCentral = `
+      <div class="pomo-missatge">${icona('check', 34)}</div>
+      <div class="pomo-titol-fase" style="color:var(--green);">
+        ${acabatTreball ? 'Pomodoro completat!' : 'Descans acabat!'}
+      </div>
+      <div class="pomo-btns-confirm">
+        <button class="btn-primari" id="pomo-continuar">
+          ${acabatTreball ? (pomo.cicleNum === 0 ? 'Iniciar descans llarg' : 'Iniciar descans') : 'Nou pomodoro'}
+        </button>
+        <button class="btn-marcar" id="pomo-prou">Prou per ara</button>
+      </div>`;
+  } else {
+    contingutCentral = `
+      <div class="pomo-tipus" style="color:${colorTipus};">${etiquetaTipus}</div>
+      <div class="pomo-temps">${formatTemps(pomo.enCurs ? pomo.restant : (pomo.tipus === 'treball' ? cfg.durada_treball : cfg.durada_descans))}</div>
+      <div class="pomo-punts">${punts}</div>
+      <div class="pomo-controls">
+        ${!pomo.enCurs || pomo.pausat
+          ? `<button class="pomo-btn-gran" id="pomo-play">${icona('play', 26)}</button>`
+          : `<button class="pomo-btn-gran" id="pomo-pausa">${icona('pausa', 24)}</button>`}
+        <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}>${icona('stop', 20)}</button>
+      </div>`;
+  }
+
+  main.innerHTML = `
+    <div class="pomo-header">
+      <div class="pomo-header-titol">Pomodoro</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-icon" id="pomo-btn-config-durades" title="Durades">${icona('config', 18)}</button>
+        <button class="btn-icon" id="pomo-btn-config-token" title="Configurar pujada a GitHub">${icona('github', 18)}</button>
+      </div>
+    </div>
+    <div class="pomo-caixa">${contingutCentral}</div>
+    <div class="pomo-nota">
+      Els pomodoros fets aquí es pugen sols a GitHub (si tens el token configurat)
+      i LEXAI els important en obrir o tancar el programa.
+    </div>`;
+
+  const bPlay = document.getElementById('pomo-play');
+  if (bPlay) bPlay.addEventListener('click', pomoIniciar);
+  const bPausa = document.getElementById('pomo-pausa');
+  if (bPausa) bPausa.addEventListener('click', pomoPausar);
+  const bStop = document.getElementById('pomo-stop');
+  if (bStop) bStop.addEventListener('click', pomoAturar);
+  const bContinuar = document.getElementById('pomo-continuar');
+  if (bContinuar) bContinuar.addEventListener('click',
+    pomo.tipus === 'treball' ? pomoContinuarDescans : pomoContinuarTreball);
+  const bProu = document.getElementById('pomo-prou');
+  if (bProu) bProu.addEventListener('click', pomoProuPerAra);
+  const bCfgDur = document.getElementById('pomo-btn-config-durades');
+  if (bCfgDur) bCfgDur.addEventListener('click', configurarDuradesPomodoro);
+  const bCfgTok = document.getElementById('pomo-btn-config-token');
+  if (bCfgTok) bCfgTok.addEventListener('click', configurarTokenGithub);
+}
+
+
 
 function mesAnterior() {
   if (state.tab === 'previsions' && state.mesIdx > 0) { state.mesIdx--; render(); }
@@ -611,6 +947,7 @@ function injectarIconesFixes() {
   document.getElementById('nav-sagues').innerHTML = icona('llibre', 20) + '<span>Sagues</span>';
   document.getElementById('nav-tbr').innerHTML = icona('piles', 20) + '<span>TBR</span>';
   document.getElementById('nav-reptes').innerHTML = icona('diana', 20) + '<span>Reptes</span>';
+  document.getElementById('nav-pomodoro').innerHTML = icona('rellotge', 20) + '<span>Pomodoro</span>';
 
   document.getElementById('opcio-github').addEventListener('click', (ev) => {
     ev.stopPropagation();
@@ -748,6 +1085,13 @@ function init() {
   }
 
   comprovarResultatActualitzacio();
+
+  // Pujada automàtica de pomodoros pendents: cada cop que l'app passa a
+  // segon pla o es tanca ("cada cop que es tanca/actualitza l'app").
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) enviarPomodorosPendents();
+  });
+  window.addEventListener('pagehide', () => { enviarPomodorosPendents(); });
 }
 
 document.addEventListener('DOMContentLoaded', init);
