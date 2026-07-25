@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -90,6 +90,7 @@ let pomo = {
   llibreId: null,              // llibre triat (opcional)
   llibreTitol: null,
   paginaInicial: null,
+  paginesLlegidesSessio: 0,     // acumulat d'aquesta visita, per ajustar la projecció sense esperar sincronitzar
 };
 
 // ── Persistència ──────────────────────────────────────────────────────────
@@ -314,6 +315,7 @@ function pomoTriarLlibre(id) {
     // editable abans d'iniciar (potser has avançat sense fer focus).
     pomo.paginaInicial = llibre.pagina_actual || 0;
   }
+  pomo.paginesLlegidesSessio = 0; // reiniciar l'ajust local en canviar de llibre
   renderPomodoro();
 }
 
@@ -359,6 +361,13 @@ function pomoAcabar() {
   if (pomo.tipus === 'treball') {
     pomo.cicleNum = (pomo.cicleNum + 1) % 4;
     incrementarComptadorAvui();
+    if (pomo.llibreId && paginaFinal !== null) {
+      // Reduir la projecció EN LOCAL sense esperar la propera sincronització
+      // (l'escriptori la reajustarà amb el ritme real un cop importi la sessió).
+      const llegides = paginaFinal - (pomo.paginaInicial || 0);
+      if (llegides > 0) pomo.paginesLlegidesSessio = (pomo.paginesLlegidesSessio || 0) + llegides;
+      pomo.paginaInicial = paginaFinal; // el proper pomodoro comença on hem deixat
+    }
     if (cfg.so_activat) reproduirBeep(1);
   } else {
     if (cfg.so_descans) reproduirBeep(1);
@@ -935,8 +944,21 @@ function renderPomodoro() {
   const paginaMostrada = pomo.paginaInicial !== null
     ? pomo.paginaInicial
     : (llibreSeleccionat ? (llibreSeleccionat.pagina_actual || 0) : 0);
+
+  let projeccioHtml = '';
+  if (llibreSeleccionat && llibreSeleccionat.pag_per_pomodoro && llibreSeleccionat.pagines) {
+    const paginaEfectiva = (llibreSeleccionat.pagina_actual || 0) + (pomo.paginesLlegidesSessio || 0);
+    const pagRestants = Math.max(0, llibreSeleccionat.pagines - paginaEfectiva);
+    const projeccioAjustada = Math.ceil(pagRestants / llibreSeleccionat.pag_per_pomodoro);
+    const ajustat = pomo.paginesLlegidesSessio > 0;
+    projeccioHtml = `<div class="pomo-projeccio${ajustat ? ' ajustat' : ''}">
+        ~${projeccioAjustada} pomodoros per acabar${ajustat ? ' (ajustat ara mateix)' : ''}
+      </div>`;
+  }
+
   const llibreActualHtml = pomo.llibreId
     ? `<div class="pomo-llibre-actiu">${icona('llibre', 15)} ${escapeHtml(pomo.llibreTitol)}</div>
+       ${projeccioHtml}
        <div class="pomo-pagina-inicial-fila">
          <label for="pomo-pagina-inicial">Pàgina inicial:</label>
          <input type="number" id="pomo-pagina-inicial" min="0"

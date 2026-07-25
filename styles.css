@@ -578,3 +578,9 @@ main { flex: 1; padding: 14px 12px 80px; }
 .card-llibre-pomo-proj {
   font-size: 10.5px; color: var(--orange); margin-top: 4px; font-weight: 600;
 }
+
+.pomo-projeccio {
+  text-align: center; font-size: 12px; color: var(--text-mid);
+  margin-bottom: 10px; margin-top: -6px;
+}
+.pomo-projeccio.ajustat { color: var(--green); font-weight: 600; }
