@@ -465,7 +465,7 @@ main { flex: 1; padding: 14px 12px 80px; }
 /* ── Pomodoro ─────────────────────────────────────────────────────────── */
 .pomo-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 13px;
 }
 .pomo-header-titol { font-size: 18px; font-weight: 800; color: var(--orange); }
 
@@ -473,32 +473,32 @@ main { flex: 1; padding: 14px 12px 80px; }
   background: var(--bg-card);
   border: 1.5px solid var(--border-lt);
   border-radius: 20px;
-  padding: 34px 20px;
+  padding: 25px 20px;
   display: flex; flex-direction: column; align-items: center;
   text-align: center;
 }
 .pomo-tipus {
   font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .pomo-temps {
-  font-size: 64px; font-weight: 800; color: var(--text-hi);
+  font-size: 48px; font-weight: 800; color: var(--text-hi);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
-.pomo-punts { margin-top: 16px; margin-bottom: 6px; }
+.pomo-punts { margin-top: 12px; margin-bottom: 5px; }
 .pomo-controls {
   display: flex; align-items: center; gap: 18px;
-  margin-top: 22px;
+  margin-top: 16px;
 }
 .pomo-btn-gran {
-  width: 74px; height: 74px; border-radius: 50%;
+  width: 56px; height: 56px; border-radius: 50%;
   background: var(--orange); color: #1A1200;
   border: none; display: flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
 .pomo-btn-mitja {
-  width: 54px; height: 54px; border-radius: 50%;
+  width: 41px; height: 41px; border-radius: 50%;
   background: var(--bg-hover); color: var(--text-mid);
   border: 1px solid var(--border-lt);
   display: flex; align-items: center; justify-content: center;

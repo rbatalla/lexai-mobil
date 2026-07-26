@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.5.5';
+const APP_VERSION = '1.5.6';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -47,10 +47,23 @@ const POMODORO_PATH = 'data/lexai_mobil_pomodoros_pendents.json';
 const POMODORO_CONFIG_KEY = 'lexaiMobil_pomodoro_config_v1';
 const POMODORO_PENDENTS_KEY = 'lexaiMobil_pomodoro_pendents_v1';
 const POMODORO_COMPTADOR_KEY = 'lexaiMobil_pomodoro_comptador_v1';
+const POMODORO_ULTIM_US_KEY = 'lexaiMobil_pomodoro_ultim_us_v1';
 const POMODORO_CONFIG_DEFECTE = {
   durada_treball: 1500, durada_descans: 300, durada_desc_llarg: 900,
   so_activat: true, so_descans: false,
 };
+
+function obtenirUltimsUsos() {
+  try {
+    return JSON.parse(localStorage.getItem(POMODORO_ULTIM_US_KEY)) || {};
+  } catch (e) { return {}; }
+}
+
+function marcarUltimUsLlibre(llibreId) {
+  const usos = obtenirUltimsUsos();
+  usos[llibreId] = Date.now();
+  localStorage.setItem(POMODORO_ULTIM_US_KEY, JSON.stringify(usos));
+}
 
 const MESOS_CA = ['Gener', 'Febrer', 'Març', 'Abril', 'Maig', 'Juny',
                    'Juliol', 'Agost', 'Setembre', 'Octubre', 'Novembre', 'Desembre'];
@@ -291,10 +304,24 @@ async function enviarPomodorosPendents() {
 
 // ── So (beep generat, sense fitxers externs) ────────────────────────────
 
+let _audioCtxPomodoro = null;
+
+function desbloquejarAudioPomodoro() {
+  // S'ha de cridar des d'un gest directe de l'usuari (el clic de ▶).
+  // A iOS, un AudioContext creat des d'un setInterval (com abans, quan el
+  // so sonava en confirmar la pàgina) o mai "desbloquejat" amb un toc real
+  // es queda suspès i no sona -- per això ara es crea/reprèn AQUÍ.
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!_audioCtxPomodoro) _audioCtxPomodoro = new AudioCtx();
+    if (_audioCtxPomodoro.state === 'suspended') _audioCtxPomodoro.resume();
+  } catch (e) { /* sense Web Audio disponible -- simplement no sonarà */ }
+}
+
 function reproduirBeep(repeticions = 1) {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioCtx();
+    const ctx = _audioCtxPomodoro || new AudioCtx();
     for (let i = 0; i < repeticions; i++) {
       const t0 = ctx.currentTime + i * 0.5;
       const osc = ctx.createOscillator();
@@ -320,6 +347,7 @@ function formatTemps(segons) {
 }
 
 function pomoIniciar() {
+  desbloquejarAudioPomodoro();
   const cfg = obtenirConfigPomodoro();
   if (!pomo.enCurs) {
     // La pàgina inicial ja s'ha triat/editat amb el camp en línia (preomplert
@@ -392,6 +420,15 @@ function pomoTick() {
 }
 
 function pomoAcabar() {
+  // El so ha de sonar AQUÍ, en el mateix instant que s'acaben els minuts --
+  // no quan es confirma la pàgina final (que pot ser molt més tard si es
+  // triga a mirar el mòbil).
+  const cfg = obtenirConfigPomodoro();
+  if (pomo.tipus === 'treball') {
+    if (cfg.so_activat) reproduirBeep(1);
+  } else {
+    if (cfg.so_descans) reproduirBeep(1);
+  }
   if (pomo.tipus === 'treball' && pomo.llibreId) {
     mostrarModalPaginaFinal();
     return;
@@ -453,7 +490,6 @@ function mostrarModalPaginaFinal() {
 }
 
 function pomoAcabarContinuar(paginaFinal) {
-  const cfg = obtenirConfigPomodoro();
   registrarSessioPomodoro('complet', pomo.total, paginaFinal);
   if (pomo.tipus === 'treball') {
     pomo.cicleNum = (pomo.cicleNum + 1) % 4;
@@ -464,10 +500,13 @@ function pomoAcabarContinuar(paginaFinal) {
       const llegides = paginaFinal - (pomo.paginaInicial || 0);
       if (llegides > 0) pomo.paginesLlegidesSessio = (pomo.paginesLlegidesSessio || 0) + llegides;
       pomo.paginaInicial = paginaFinal; // el proper pomodoro comença on hem deixat
+      // També a l'estat general del llibre -- si no, la resta de la UI
+      // (targetes, selecció d'un altre llibre i tornar) seguia mostrant
+      // la pàgina vella fins a la propera sincronització amb l'escriptori.
+      const llibreActualitzat = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
+      if (llibreActualitzat) llibreActualitzat.pagina_actual = paginaFinal;
     }
-    if (cfg.so_activat) reproduirBeep(1);
-  } else {
-    if (cfg.so_descans) reproduirBeep(1);
+    if (pomo.llibreId) marcarUltimUsLlibre(pomo.llibreId);
   }
   pomo.enCurs = false;
   pomo.esperantConfirmacio = true;
@@ -678,6 +717,15 @@ function render() {
   document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => {
     btn.classList.toggle('actiu', btn.getAttribute('data-tab') === state.tab);
   });
+
+  // El Pomodoro gestiona el seu propi encaix exacte amb l'alçada de la
+  // pantalla (.pomo-vista) -- el padding-bottom que necessiten la resta de
+  // pestanyes (perquè l'scroll normal no quedi tapat per la barra inferior)
+  // aquí sobra i feia que la pàgina sencera es fes més alta que la
+  // pantalla, provocant un scroll general no desitjat.
+  const mainEl = document.getElementById('main');
+  if (mainEl) mainEl.style.paddingBottom = (state.tab === 'pomodoro') ? '0' : '';
+  document.body.style.overflow = (state.tab === 'pomodoro') ? 'hidden' : '';
 
   if (state.tab === 'previsions') renderPrevisions();
   else if (state.tab === 'sagues') renderSagues();
@@ -1089,7 +1137,13 @@ function renderPomodoro() {
 
   let seccioLlibres = '';
   if (state.llibresEnCurs.length) {
-    const cards = state.llibresEnCurs.map(l => {
+    const usos = obtenirUltimsUsos();
+    const llibresOrdenats = [...state.llibresEnCurs].sort((a, b) => {
+      const ua = usos[a.id] || 0, ub = usos[b.id] || 0;
+      if (ua !== ub) return ub - ua; // més recent primer
+      return (a.titol || '').localeCompare(b.titol || '');
+    });
+    const cards = llibresOrdenats.map(l => {
       const seleccionat = l.id === pomo.llibreId;
       const pct = l.pagines ? Math.min(100, Math.round((l.pagina_actual / l.pagines) * 100)) : null;
       const extra = [];
