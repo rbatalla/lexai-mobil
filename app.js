@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.5.2';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -222,15 +222,35 @@ async function enviarPomodorosPendents() {
   const url = `https://api.github.com/repos/${repo}/contents/${POMODORO_PATH}`;
   try {
     let sha = null;
+    let remots = [];
     const getResp = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
     });
     if (getResp.ok) {
-      sha = (await getResp.json()).sha;
+      const meta = await getResp.json();
+      sha = meta.sha;
+      // La Contents API ja retorna el contingut (base64) en la mateixa
+      // crida -- l'aprofitem per fusionar, no només per llegir el sha.
+      if (meta.content) {
+        try {
+          const decodificat = decodeURIComponent(escape(atob(meta.content.replace(/\n/g, ''))));
+          const parsed = JSON.parse(decodificat);
+          if (Array.isArray(parsed)) remots = parsed;
+        } catch (e) { /* contingut il·legible -> es continua només amb els locals */ }
+      }
     } else if (getResp.status !== 404) {
       return; // error temporal, es reintentarà en el proper trigger
     }
-    const contingut = btoa(unescape(encodeURIComponent(JSON.stringify(pendents))));
+
+    // Fusió, no sobreescriptura: si l'escriptori encara no ha consumit
+    // el que hi havia al remot (p.ex. dos pomodoros seguits abans que
+    // s'obri LEXAI), NO el descartem -- unim remot + locals pendents,
+    // sense duplicar (per data + hora d'inici + tipus + llibre).
+    const clau = s => `${s.data}|${s.hora_inici}|${s.tipus}|${s.llibre_id || ''}`;
+    const clausRemots = new Set(remots.map(clau));
+    const unio = remots.concat(pendents.filter(s => !clausRemots.has(clau(s))));
+
+    const contingut = btoa(unescape(encodeURIComponent(JSON.stringify(unio))));
     const body = { message: 'LEXAI Mòbil: pomodoros pendents', content: contingut };
     if (sha) body.sha = sha;
     const putResp = await fetch(url, {
@@ -349,14 +369,68 @@ function pomoTick() {
 }
 
 function pomoAcabar() {
-  const cfg = obtenirConfigPomodoro();
-  let paginaFinal = null;
   if (pomo.tipus === 'treball' && pomo.llibreId) {
-    const resposta = window.prompt(
-      `Pàgina final de "${pomo.llibreTitol}" (inici: ${pomo.paginaInicial}):`,
-      String(pomo.paginaInicial || 0));
-    if (resposta !== null) paginaFinal = parseInt(resposta, 10) || null;
+    mostrarModalPaginaFinal();
+    return;
   }
+  pomoAcabarContinuar(null);
+}
+
+function mostrarModalPaginaFinal() {
+  const llibre = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
+  const inicial = pomo.paginaInicial || 0;
+  const ritme = (llibre && llibre.pag_per_pomodoro) ? Math.round(llibre.pag_per_pomodoro) : null;
+  let valor = ritme ? inicial + ritme : inicial;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-pagina-final';
+  overlay.innerHTML = `
+    <div class="modal-caixa modal-pagina-final-caixa">
+      <div class="modal-titol">Pàgina final</div>
+      <div class="modal-linia discreta">${escapeHtml(pomo.llibreTitol || '')} · inici: ${inicial}</div>
+      <div class="pagina-final-stepper">
+        <button type="button" class="pagina-final-btn" id="pf-menys" aria-label="Una pàgina menys">−</button>
+        <div class="pagina-final-valor" id="pf-valor">${valor}</div>
+        <button type="button" class="pagina-final-btn" id="pf-mes" aria-label="Una pàgina més">+</button>
+      </div>
+      <div class="pagina-final-pct" id="pf-pct"></div>
+      <button type="button" id="pf-confirmar">Confirmar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const lblValor = overlay.querySelector('#pf-valor');
+  const lblPct = overlay.querySelector('#pf-pct');
+
+  function actualitzarPct() {
+    if (ritme) {
+      const fetes = valor - inicial;
+      const pct = Math.max(0, Math.round((fetes / ritme) * 100));
+      lblPct.textContent = `${pct}% del pomodoro esperat (~${ritme} pàg.)`;
+    } else {
+      lblPct.textContent = '';
+    }
+  }
+  actualitzarPct();
+
+  overlay.querySelector('#pf-menys').addEventListener('click', () => {
+    valor = Math.max(0, valor - 1);
+    lblValor.textContent = valor;
+    actualitzarPct();
+  });
+  overlay.querySelector('#pf-mes').addEventListener('click', () => {
+    valor += 1;
+    lblValor.textContent = valor;
+    actualitzarPct();
+  });
+  overlay.querySelector('#pf-confirmar').addEventListener('click', () => {
+    document.body.removeChild(overlay);
+    pomoAcabarContinuar(valor);
+  });
+}
+
+function pomoAcabarContinuar(paginaFinal) {
+  const cfg = obtenirConfigPomodoro();
   registrarSessioPomodoro('complet', pomo.total, paginaFinal);
   if (pomo.tipus === 'treball') {
     pomo.cicleNum = (pomo.cicleNum + 1) % 4;
@@ -998,24 +1072,40 @@ function renderPomodoro() {
   }
 
   main.innerHTML = `
-    <div class="pomo-header">
-      <div class="pomo-header-titol">Pomodoro
-        <span class="pomo-comptador-avui">${obtenirComptadorAvui()} avui</span>
+    <div class="pomo-vista" id="pomo-vista">
+      <div class="pomo-top-fix">
+        <div class="pomo-header">
+          <div class="pomo-header-titol">Pomodoro
+            <span class="pomo-comptador-avui">${obtenirComptadorAvui()} avui</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-icon" id="pomo-btn-config-durades" title="Durades">${icona('config', 18)}</button>
+            <button class="btn-icon" id="pomo-btn-config-token" title="Configurar pujada a GitHub">${icona('github', 18)}</button>
+          </div>
+        </div>
+        <div class="pomo-caixa">
+          ${llibreActualHtml}
+          ${contingutCentral}
+        </div>
       </div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-icon" id="pomo-btn-config-durades" title="Durades">${icona('config', 18)}</button>
-        <button class="btn-icon" id="pomo-btn-config-token" title="Configurar pujada a GitHub">${icona('github', 18)}</button>
-      </div>
-    </div>
-    <div class="pomo-caixa">
-      ${llibreActualHtml}
-      ${contingutCentral}
-    </div>
-    ${seccioLlibres}
-    <div class="pomo-nota">
-      Els pomodoros fets aquí es pugen sols a GitHub (si tens el token configurat)
-      i LEXAI els important en obrir o tancar el programa.
+      <div class="pomo-llista-wrap">${seccioLlibres}</div>
     </div>`;
+
+  const vistaPomo = document.getElementById('pomo-vista');
+  if (vistaPomo) {
+    // Alçada disponible real (viewport − capçalera sticky − barra inferior)
+    // perquè només la llista de targetes faci scroll (vertical) i el
+    // rellotge/controls quedin sempre visibles. Es recalcula a cada
+    // render (cada segon quan el pomodoro està en marxa) i al redimensionar.
+    const headerEl = document.querySelector('header');
+    const navEl = document.querySelector('.bottom-nav');
+    const mainEl = document.getElementById('main');
+    const hH = headerEl ? headerEl.getBoundingClientRect().height : 0;
+    const nH = navEl ? navEl.getBoundingClientRect().height : 0;
+    const topMain = mainEl ? mainEl.getBoundingClientRect().top : hH;
+    const alt = Math.max(280, window.innerHeight - topMain - nH - 14);
+    vistaPomo.style.height = `${alt}px`;
+  }
 
   const inputPagInicial = document.getElementById('pomo-pagina-inicial');
   if (inputPagInicial) {
@@ -1238,6 +1328,13 @@ function init() {
     if (document.hidden) enviarPomodorosPendents();
   });
   window.addEventListener('pagehide', () => { enviarPomodorosPendents(); });
+
+  window.addEventListener('resize', () => {
+    if (state.tab === 'pomodoro') renderPomodoro();
+  });
+  window.addEventListener('orientationchange', () => {
+    if (state.tab === 'pomodoro') setTimeout(renderPomodoro, 200);
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
