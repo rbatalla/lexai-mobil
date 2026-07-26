@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.5.2';
+const APP_VERSION = '1.5.3';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -973,6 +973,30 @@ function configurarDuradesPomodoro() {
   if (!pomo.enCurs) renderPomodoro();
 }
 
+function ajustarAlturaPomodoro() {
+  const vistaPomo = document.getElementById('pomo-vista');
+  if (!vistaPomo) return;
+  // Alçada disponible real (viewport − capçalera sticky − barra inferior)
+  // perquè només la llista de targetes faci scroll (vertical) i el
+  // rellotge/controls quedin sempre visibles.
+  //
+  // IMPORTANT: aquesta funció NOMÉS toca vistaPomo.style.height, mai
+  // reconstrueix el contingut (innerHTML). Al mòbil, quan el teclat
+  // virtual apareix (p.ex. en tocar el camp "Pàgina inicial"), el
+  // navegador dispara un 'resize' -- si allà cridàvem renderPomodoro()
+  // sencer, es destruïa l'<input> que tenia el focus i el teclat es
+  // tancava a la mil·lèsima de segon (no es podia escriure). Per això
+  // el resize NOMÉS recalcula l'alçada, no torna a pintar res.
+  const headerEl = document.querySelector('header');
+  const navEl = document.querySelector('.bottom-nav');
+  const mainEl = document.getElementById('main');
+  const hH = headerEl ? headerEl.getBoundingClientRect().height : 0;
+  const nH = navEl ? navEl.getBoundingClientRect().height : 0;
+  const topMain = mainEl ? mainEl.getBoundingClientRect().top : hH;
+  const alt = Math.max(280, window.innerHeight - topMain - nH - 14);
+  vistaPomo.style.height = `${alt}px`;
+}
+
 function renderPomodoro() {
   const main = document.getElementById('main');
   const nav = document.getElementById('mes-nav');
@@ -1091,21 +1115,7 @@ function renderPomodoro() {
       <div class="pomo-llista-wrap">${seccioLlibres}</div>
     </div>`;
 
-  const vistaPomo = document.getElementById('pomo-vista');
-  if (vistaPomo) {
-    // Alçada disponible real (viewport − capçalera sticky − barra inferior)
-    // perquè només la llista de targetes faci scroll (vertical) i el
-    // rellotge/controls quedin sempre visibles. Es recalcula a cada
-    // render (cada segon quan el pomodoro està en marxa) i al redimensionar.
-    const headerEl = document.querySelector('header');
-    const navEl = document.querySelector('.bottom-nav');
-    const mainEl = document.getElementById('main');
-    const hH = headerEl ? headerEl.getBoundingClientRect().height : 0;
-    const nH = navEl ? navEl.getBoundingClientRect().height : 0;
-    const topMain = mainEl ? mainEl.getBoundingClientRect().top : hH;
-    const alt = Math.max(280, window.innerHeight - topMain - nH - 14);
-    vistaPomo.style.height = `${alt}px`;
-  }
+  ajustarAlturaPomodoro();
 
   const inputPagInicial = document.getElementById('pomo-pagina-inicial');
   if (inputPagInicial) {
@@ -1330,10 +1340,10 @@ function init() {
   window.addEventListener('pagehide', () => { enviarPomodorosPendents(); });
 
   window.addEventListener('resize', () => {
-    if (state.tab === 'pomodoro') renderPomodoro();
+    if (state.tab === 'pomodoro') ajustarAlturaPomodoro();
   });
   window.addEventListener('orientationchange', () => {
-    if (state.tab === 'pomodoro') setTimeout(renderPomodoro, 200);
+    if (state.tab === 'pomodoro') setTimeout(ajustarAlturaPomodoro, 200);
   });
 }
 
