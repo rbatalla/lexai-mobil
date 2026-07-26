@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.5.6';
+const APP_VERSION = '1.5.7';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -135,6 +135,16 @@ function desarDades(dades) {
   }
 }
 
+function desarEstatLlibresEnCurs() {
+  // Persisteix NOMÉS canvis locals fets sobre state.llibresEnCurs (pàgina
+  // actual, pomodoros restants, darrer focus) sense esperar una
+  // sincronització completa amb l'escriptori -- si no, es perdien en
+  // recarregar l'app i tornava a sortir la pàgina vella.
+  const actual = carregarDades();
+  actual.llibresEnCurs = state.llibresEnCurs;
+  desarDades(actual);
+}
+
 function carregarMeta() {
   try {
     const raw = localStorage.getItem(META_KEY);
@@ -170,12 +180,12 @@ function obtenirRepoGithub() {
 }
 
 async function pujarPomodorosAra() {
-  let token = localStorage.getItem(GITHUB_TOKEN_KEY);
+  const token = localStorage.getItem(GITHUB_TOKEN_KEY);
   if (!token) {
-    // Sense token encara -- demanem repositori+token abans de poder pujar res.
-    configurarTokenGithub();
-    token = localStorage.getItem(GITHUB_TOKEN_KEY);
-    if (!token) return; // configuració cancel·lada
+    // Sense token encara -- demanem repositori+token abans de poder pujar
+    // res; en desar, es reintenta automàticament la pujada.
+    configurarPomodoro(() => pujarPomodorosAra());
+    return;
   }
   const pendents = obtenirPomodorosPendents();
   if (!pendents.length) {
@@ -192,23 +202,75 @@ async function pujarPomodorosAra() {
   }
 }
 
-function configurarTokenGithub() {
+function configurarPomodoro(onDesat) {
+  const cfg = obtenirConfigPomodoro();
   const repoActual = obtenirRepoGithub();
-  const repoNou = window.prompt(
-    "Repositori de GitHub (usuari/nom) on pujar els pomodoros:", repoActual);
-  if (repoNou === null) return;
-  if (repoNou.trim()) localStorage.setItem(GITHUB_REPO_KEY, repoNou.trim());
-
   const tokenActual = localStorage.getItem(GITHUB_TOKEN_KEY) || '';
-  const tokenNou = window.prompt(
-    "Token de GitHub amb permís d'escriptura sobre aquest repositori\n" +
-    "(es guarda només en aquest mòbil, mai al codi):",
-    tokenActual ? '••••••••' : '');
-  if (tokenNou === null) return;
-  if (tokenNou && tokenNou !== '••••••••') {
-    localStorage.setItem(GITHUB_TOKEN_KEY, tokenNou.trim());
-  }
-  mostrarToast('Configuració de pujada desada.');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-caixa modal-config-caixa">
+      <div class="modal-titol">Configuració del Pomodoro</div>
+
+      <div class="config-seccio">Durades (minuts)</div>
+      <div class="config-fila">
+        <label for="cfg-treball">Treball</label>
+        <input type="number" id="cfg-treball" min="1" value="${Math.round(cfg.durada_treball / 60)}">
+      </div>
+      <div class="config-fila">
+        <label for="cfg-descans">Descans curt</label>
+        <input type="number" id="cfg-descans" min="1" value="${Math.round(cfg.durada_descans / 60)}">
+      </div>
+      <div class="config-fila">
+        <label for="cfg-descans-llarg">Descans llarg (cada 4)</label>
+        <input type="number" id="cfg-descans-llarg" min="1" value="${Math.round(cfg.durada_desc_llarg / 60)}">
+      </div>
+
+      <div class="config-check-fila">
+        <input type="checkbox" id="cfg-so-treball" ${cfg.so_activat ? 'checked' : ''}>
+        <label for="cfg-so-treball">So en acabar un treball</label>
+      </div>
+      <div class="config-check-fila">
+        <input type="checkbox" id="cfg-so-descans" ${cfg.so_descans ? 'checked' : ''}>
+        <label for="cfg-so-descans">So en acabar un descans</label>
+      </div>
+
+      <div class="config-seccio">Sincronització amb GitHub</div>
+      <div class="config-fila config-fila-text">
+        <label for="cfg-repo">Repositori</label>
+        <input type="text" id="cfg-repo" value="${escapeHtml(repoActual)}" placeholder="usuari/repositori">
+      </div>
+      <div class="config-fila config-fila-text">
+        <label for="cfg-token">Token d'escriptura</label>
+        <input type="password" id="cfg-token" value="${escapeHtml(tokenActual)}" placeholder="ghp_...">
+      </div>
+
+      <button type="button" id="cfg-desar">Desar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#cfg-desar').addEventListener('click', () => {
+    const nt = parseInt(overlay.querySelector('#cfg-treball').value, 10);
+    const nd = parseInt(overlay.querySelector('#cfg-descans').value, 10);
+    const ndl = parseInt(overlay.querySelector('#cfg-descans-llarg').value, 10);
+    if (nt > 0) cfg.durada_treball = nt * 60;
+    if (nd > 0) cfg.durada_descans = nd * 60;
+    if (ndl > 0) cfg.durada_desc_llarg = ndl * 60;
+    cfg.so_activat = overlay.querySelector('#cfg-so-treball').checked;
+    cfg.so_descans = overlay.querySelector('#cfg-so-descans').checked;
+    desarConfigPomodoro(cfg);
+
+    const repoNou = overlay.querySelector('#cfg-repo').value.trim();
+    if (repoNou) localStorage.setItem(GITHUB_REPO_KEY, repoNou);
+    const tokenNou = overlay.querySelector('#cfg-token').value.trim();
+    if (tokenNou) localStorage.setItem(GITHUB_TOKEN_KEY, tokenNou);
+
+    document.body.removeChild(overlay);
+    mostrarToast('Configuració desada.');
+    if (!pomo.enCurs) renderPomodoro();
+    if (typeof onDesat === 'function') onDesat();
+  });
 }
 
 // ── Configuració i cua de pomodoros ─────────────────────────────────────
@@ -347,6 +409,18 @@ function formatTemps(segons) {
 }
 
 function pomoIniciar() {
+  if (!pomo.enCurs && pomo.tipus === 'treball' && !pomo.llibreId) {
+    mostrarConfirmacio(
+      'Pomodoro sense llibre',
+      'No has triat cap llibre. Vols fer aquest pomodoro sense llibre assignat?',
+      'Sí, sense llibre', 'No, vull triar-ne un',
+      () => pomoIniciarConfirmat());
+    return;
+  }
+  pomoIniciarConfirmat();
+}
+
+function pomoIniciarConfirmat() {
   desbloquejarAudioPomodoro();
   const cfg = obtenirConfigPomodoro();
   if (!pomo.enCurs) {
@@ -436,6 +510,28 @@ function pomoAcabar() {
   pomoAcabarContinuar(null);
 }
 
+function mostrarConfirmacio(titol, missatge, textSi, textNo, onConfirmar) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-caixa">
+      <div class="modal-titol">${escapeHtml(titol)}</div>
+      <div class="modal-linia" style="margin:10px 0 4px;">${escapeHtml(missatge)}</div>
+      <div class="confirmacio-botons">
+        <button type="button" id="conf-no" class="confirmacio-btn-no">${escapeHtml(textNo)}</button>
+        <button type="button" id="conf-si">${escapeHtml(textSi)}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#conf-no').addEventListener('click', () => {
+    document.body.removeChild(overlay);
+  });
+  overlay.querySelector('#conf-si').addEventListener('click', () => {
+    document.body.removeChild(overlay);
+    onConfirmar();
+  });
+}
+
 function mostrarModalPaginaFinal() {
   const llibre = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
   const inicial = pomo.paginaInicial || 0;
@@ -504,7 +600,16 @@ function pomoAcabarContinuar(paginaFinal) {
       // (targetes, selecció d'un altre llibre i tornar) seguia mostrant
       // la pàgina vella fins a la propera sincronització amb l'escriptori.
       const llibreActualitzat = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
-      if (llibreActualitzat) llibreActualitzat.pagina_actual = paginaFinal;
+      if (llibreActualitzat) {
+        llibreActualitzat.pagina_actual = paginaFinal;
+        if (typeof llibreActualitzat.pomodoros_restants === 'number') {
+          llibreActualitzat.pomodoros_restants = Math.max(0, llibreActualitzat.pomodoros_restants - 1);
+        }
+        llibreActualitzat.darrer_focus = new Date().toISOString().slice(0, 10);
+        // Persistir a localStorage -- si només toquem state en memòria, es
+        // perd en recarregar l'app (per això mostrava una pàgina vella).
+        desarEstatLlibresEnCurs();
+      }
     }
     if (pomo.llibreId) marcarUltimUsLlibre(pomo.llibreId);
   }
@@ -1027,23 +1132,6 @@ function renderCard(r) {
 
 // ── Vista Pomodoro ──────────────────────────────────────────────────────
 
-function configurarDuradesPomodoro() {
-  const cfg = obtenirConfigPomodoro();
-  const t = window.prompt("Durada del treball (minuts):", Math.round(cfg.durada_treball / 60));
-  if (t === null) return;
-  const d = window.prompt("Durada del descans curt (minuts):", Math.round(cfg.durada_descans / 60));
-  if (d === null) return;
-  const dl = window.prompt("Durada del descans llarg, cada 4 (minuts):", Math.round(cfg.durada_desc_llarg / 60));
-  if (dl === null) return;
-  const nt = parseInt(t, 10), nd = parseInt(d, 10), ndl = parseInt(dl, 10);
-  if (nt > 0) cfg.durada_treball = nt * 60;
-  if (nd > 0) cfg.durada_descans = nd * 60;
-  if (ndl > 0) cfg.durada_desc_llarg = ndl * 60;
-  desarConfigPomodoro(cfg);
-  mostrarToast('Durades del pomodoro desades.');
-  if (!pomo.enCurs) renderPomodoro();
-}
-
 function ajustarAlturaPomodoro() {
   const vistaPomo = document.getElementById('pomo-vista');
   if (!vistaPomo) return;
@@ -1139,33 +1227,44 @@ function renderPomodoro() {
   if (state.llibresEnCurs.length) {
     const usos = obtenirUltimsUsos();
     const llibresOrdenats = [...state.llibresEnCurs].sort((a, b) => {
+      // 1r criteri: darrer_focus real (ve de l'escriptori, inclou
+      // pomodoros fets tant al mòbil com a l'escriptori -- més fiable
+      // que l'ús local, que només sap dels fets des d'aquest mòbil).
+      const fa = a.darrer_focus || '', fb = b.darrer_focus || '';
+      if (fa !== fb) return fa < fb ? 1 : -1; // més recent (data més gran) primer
+      // 2n criteri (desempat, o si cap dels dos té darrer_focus): ús local
       const ua = usos[a.id] || 0, ub = usos[b.id] || 0;
-      if (ua !== ub) return ub - ua; // més recent primer
+      if (ua !== ub) return ub - ua;
       return (a.titol || '').localeCompare(b.titol || '');
     });
     const cards = llibresOrdenats.map(l => {
       const seleccionat = l.id === pomo.llibreId;
       const pct = l.pagines ? Math.min(100, Math.round((l.pagina_actual / l.pagines) * 100)) : null;
-      const extra = [];
-      if (l.pag_per_pomodoro) extra.push(`≈${l.pag_per_pomodoro} pàg/pom`);
-      if (l.pomodoros_restants) extra.push(`~${l.pomodoros_restants} pom. per acabar`);
+      const teRestants = typeof l.pomodoros_restants === 'number';
       return `
         <button class="card-llibre-pomo${seleccionat ? ' seleccionat' : ''}"
                 data-llibre-id="${l.id}" ${pomo.enCurs ? 'disabled' : ''}>
-          <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
-          ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
-          <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
-          ${extra.length ? `<div class="card-llibre-pomo-proj">${extra.join(' · ')}</div>` : ''}
+          <div class="card-llibre-pomo-cos">
+            <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
+            ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
+            <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
+            ${l.pag_per_pomodoro ? `<div class="card-llibre-pomo-proj">≈${l.pag_per_pomodoro} pàg/pom</div>` : ''}
+          </div>
+          ${teRestants ? `
+          <div class="card-llibre-pomo-restants" title="Pomodoros estimats per acabar el llibre">
+            <span class="card-llibre-pomo-restants-num">${l.pomodoros_restants}</span>
+            <span class="card-llibre-pomo-restants-lbl">pom.</span>
+          </div>` : ''}
         </button>`;
     }).join('');
     seccioLlibres = `
       <div class="seccio-titol" style="color:var(--text-label); margin-top:20px;">
-        Llibre (opcional) ${pomo.llibreId ? '· toca per treure la selecció' : ''}
+        Escollir llibre (${llibresOrdenats.length}) ${pomo.llibreId ? '· toca per treure la selecció' : ''}
       </div>
       <div class="pomo-llibres-scroll">${cards}</div>`;
   } else {
     seccioLlibres = `
-      <div class="seccio-titol" style="color:var(--text-label); margin-top:20px;">Llibre (opcional)</div>
+      <div class="seccio-titol" style="color:var(--text-label); margin-top:20px;">Escollir llibre</div>
       <div class="pomo-sense-llibres">
         Cap llibre "Llegint" trobat. Sincronitza amb GitHub (🔄) després
         d'haver actualitzat i tancat/sincronitzat LEXAI a l'escriptori.
@@ -1180,9 +1279,8 @@ function renderPomodoro() {
             <span class="pomo-comptador-avui">${obtenirComptadorAvui()} avui</span>
           </div>
           <div style="display:flex; gap:8px;">
-            <button class="btn-icon" id="pomo-btn-config-durades" title="Durades">${icona('config', 18)}</button>
             <button class="btn-icon" id="pomo-btn-pujar" title="Pujar pomodoros pendents ara">${icona('pujar', 18)}</button>
-            <button class="btn-icon" id="pomo-btn-config-token" title="Configurar repositori/token de GitHub">${icona('config', 14)}</button>
+            <button class="btn-icon" id="pomo-btn-config" title="Configuració del Pomodoro">${icona('config', 18)}</button>
           </div>
         </div>
         <div class="pomo-caixa">
@@ -1218,10 +1316,8 @@ function renderPomodoro() {
     pomo.tipus === 'treball' ? pomoContinuarDescans : pomoContinuarTreball);
   const bProu = document.getElementById('pomo-prou');
   if (bProu) bProu.addEventListener('click', pomoProuPerAra);
-  const bCfgDur = document.getElementById('pomo-btn-config-durades');
-  if (bCfgDur) bCfgDur.addEventListener('click', configurarDuradesPomodoro);
-  const bCfgTok = document.getElementById('pomo-btn-config-token');
-  if (bCfgTok) bCfgTok.addEventListener('click', configurarTokenGithub);
+  const bCfg = document.getElementById('pomo-btn-config');
+  if (bCfg) bCfg.addEventListener('click', () => configurarPomodoro());
   const bPujar = document.getElementById('pomo-btn-pujar');
   if (bPujar) bPujar.addEventListener('click', pujarPomodorosAra);
 }
