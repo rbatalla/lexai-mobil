@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.5.7';
+const APP_VERSION = '1.5.8';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -50,7 +50,7 @@ const POMODORO_COMPTADOR_KEY = 'lexaiMobil_pomodoro_comptador_v1';
 const POMODORO_ULTIM_US_KEY = 'lexaiMobil_pomodoro_ultim_us_v1';
 const POMODORO_CONFIG_DEFECTE = {
   durada_treball: 1500, durada_descans: 300, durada_desc_llarg: 900,
-  so_activat: true, so_descans: false,
+  so_activat: true, so_descans: false, so_durada: 5,
 };
 
 function obtenirUltimsUsos() {
@@ -235,6 +235,10 @@ function configurarPomodoro(onDesat) {
         <input type="checkbox" id="cfg-so-descans" ${cfg.so_descans ? 'checked' : ''}>
         <label for="cfg-so-descans">So en acabar un descans</label>
       </div>
+      <div class="config-fila">
+        <label for="cfg-so-durada">Durada del so (segons)</label>
+        <input type="number" id="cfg-so-durada" min="1" max="30" value="${cfg.so_durada}">
+      </div>
 
       <div class="config-seccio">Sincronització amb GitHub</div>
       <div class="config-fila config-fila-text">
@@ -259,6 +263,8 @@ function configurarPomodoro(onDesat) {
     if (ndl > 0) cfg.durada_desc_llarg = ndl * 60;
     cfg.so_activat = overlay.querySelector('#cfg-so-treball').checked;
     cfg.so_descans = overlay.querySelector('#cfg-so-descans').checked;
+    const nsd = parseInt(overlay.querySelector('#cfg-so-durada').value, 10);
+    if (nsd > 0) cfg.so_durada = Math.min(nsd, 30);
     desarConfigPomodoro(cfg);
 
     const repoNou = overlay.querySelector('#cfg-repo').value.trim();
@@ -380,10 +386,14 @@ function desbloquejarAudioPomodoro() {
   } catch (e) { /* sense Web Audio disponible -- simplement no sonarà */ }
 }
 
-function reproduirBeep(repeticions = 1) {
+function reproduirBeep(duradaSegons = 5) {
+  // duradaSegons: durada total aproximada del so (configurable a "Configuració
+  // del Pomodoro"). Es repeteix un beep de 0.32s cada 0.5s fins cobrir la
+  // durada demanada, en lloc d'un nombre fix de repeticions.
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     const ctx = _audioCtxPomodoro || new AudioCtx();
+    const repeticions = Math.max(1, Math.round(duradaSegons / 0.5));
     for (let i = 0; i < repeticions; i++) {
       const t0 = ctx.currentTime + i * 0.5;
       const osc = ctx.createOscillator();
@@ -499,9 +509,9 @@ function pomoAcabar() {
   // triga a mirar el mòbil).
   const cfg = obtenirConfigPomodoro();
   if (pomo.tipus === 'treball') {
-    if (cfg.so_activat) reproduirBeep(1);
+    if (cfg.so_activat) reproduirBeep(cfg.so_durada);
   } else {
-    if (cfg.so_descans) reproduirBeep(1);
+    if (cfg.so_descans) reproduirBeep(cfg.so_durada);
   }
   if (pomo.tipus === 'treball' && pomo.llibreId) {
     mostrarModalPaginaFinal();
