@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.5.8';
+const APP_VERSION = '1.5.9';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -71,6 +71,22 @@ const MESOS_CA = ['Gener', 'Febrer', 'Març', 'Abril', 'Maig', 'Juny',
 const ESTAT_ORDRE = ['pendent', 'transit', 'comprat'];
 const ESTAT_LABEL = { pendent: 'Pendents', transit: 'En trànsit', comprat: 'Comprades' };
 
+// Blocs de categoria del TBR (mateixos valors que tbr.categoria a LEXAI escriptori:
+// 'comic' / 'genere' / 'no_ficcio' / 'mainstream'). Clau '' = sense filtre (Tot).
+// 'classics' és transversal (no és un valor de categoria): filtra pel flag
+// `es_classic` que ja arriba calculat des de l'escriptori.
+const TBR_CATEGORIES = [
+  { key: '',           label: 'Tot' },
+  { key: 'comic',      label: 'Còmic' },
+  { key: 'genere',     label: 'Gènere' },
+  { key: 'no_ficcio',  label: 'Assaig' },
+  { key: 'mainstream', label: 'Mainstream' },
+  { key: 'classics',   label: 'Clàssics' },
+];
+const TBR_CATEGORIA_LABEL = Object.fromEntries(
+  TBR_CATEGORIES.filter(c => c.key).map(c => [c.key, c.label])
+);
+
 let state = {
   previsions: [],
   sagues: [],
@@ -80,6 +96,7 @@ let state = {
   mesos: [],      // llista ordenada de 'YYYY-MM' presents a les previsions
   mesIdx: 0,
   tab: 'previsions',  // 'previsions' | 'sagues' | 'tbr' | 'reptes' | 'pomodoro'
+  tbrFiltreCategoria: '',  // '' = Tot | 'comic' | 'genere' | 'no_ficcio' | 'mainstream'
 };
 
 // Categories de Reptes que compten per al comptador de copes (6 en total:
@@ -842,6 +859,9 @@ function render() {
   if (mainEl) mainEl.style.paddingBottom = (state.tab === 'pomodoro') ? '0' : '';
   document.body.style.overflow = (state.tab === 'pomodoro') ? 'hidden' : '';
 
+  const tbrFiltres = document.getElementById('tbr-filtres');
+  if (tbrFiltres) tbrFiltres.style.display = 'none';
+
   if (state.tab === 'previsions') renderPrevisions();
   else if (state.tab === 'sagues') renderSagues();
   else if (state.tab === 'tbr') renderTbr();
@@ -996,8 +1016,10 @@ function renderTbr() {
   const main = document.getElementById('main');
   const nav = document.getElementById('mes-nav');
   nav.style.display = 'none';
+  const filtresEl = document.getElementById('tbr-filtres');
 
   if (!state.tbr.length) {
+    if (filtresEl) filtresEl.style.display = 'none';
     main.innerHTML = `
       <div class="buit">
         <div class="icona">${icona('piles', 40)}</div>
@@ -1010,11 +1032,42 @@ function renderTbr() {
     return;
   }
 
+  // Construir la barra de filtres un únic cop; delegació d'esdeveniments
+  // (els botons es reutilitzen entre renders, no es recreen).
+  if (filtresEl && !filtresEl.dataset.build) {
+    filtresEl.innerHTML = TBR_CATEGORIES.map(c =>
+      `<button class="tbr-filtre-btn" data-cat="${c.key}">${escapeHtml(c.label)}</button>`
+    ).join('');
+    filtresEl.dataset.build = '1';
+    filtresEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tbr-filtre-btn');
+      if (!btn) return;
+      state.tbrFiltreCategoria = btn.getAttribute('data-cat');
+      renderTbr();
+    });
+  }
+  if (filtresEl) {
+    filtresEl.style.display = 'flex';
+    filtresEl.querySelectorAll('.tbr-filtre-btn').forEach(b => {
+      b.classList.toggle('actiu', b.getAttribute('data-cat') === state.tbrFiltreCategoria);
+    });
+  }
+
+  const llista = !state.tbrFiltreCategoria
+    ? state.tbr
+    : state.tbrFiltreCategoria === 'classics'
+      ? state.tbr.filter(t => t.es_classic)
+      : state.tbr.filter(t => t.categoria === state.tbrFiltreCategoria);
+
   let html = `<div class="resum-mes" style="grid-template-columns: repeat(1,1fr);">
-      <div class="resum-cel total"><div class="n">${state.tbr.length}</div><div class="lbl">Llibres al TBR</div></div>
+      <div class="resum-cel total"><div class="n">${llista.length}</div><div class="lbl">Llibres al TBR</div></div>
     </div>`;
 
-  for (const t of state.tbr) {
+  if (!llista.length) {
+    html += `<div class="buit"><p>Cap llibre en aquest bloc.</p></div>`;
+  }
+
+  for (const t of llista) {
     html += `
       <div class="card-tbr">
         <div class="tbr-num">${t.posicio}</div>
@@ -1022,7 +1075,8 @@ function renderTbr() {
           <div class="tbr-titol">${escapeHtml(t.titol)}</div>
           <div class="tbr-autor">${escapeHtml(t.autor || '')}</div>
           <div class="tbr-meta">
-            <span class="pill">${escapeHtml(t.categoria || '')}</span>
+            <span class="pill">${escapeHtml(TBR_CATEGORIA_LABEL[t.categoria] || t.categoria || '')}</span>
+            ${t.es_classic ? `<span class="pill">Clàssic</span>` : ''}
             ${t.serie_nom ? `<span class="pill">${icona('cantonada', 12)} ${escapeHtml(t.serie_nom)}</span>` : ''}
           </div>
         </div>
