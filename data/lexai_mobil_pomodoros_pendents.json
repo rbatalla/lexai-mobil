@@ -1,1 +1,1 @@
-[{"tipus":"treball","data":"2026-07-28","hora_inici":"23:06:24","hora_fi":"23:36:01","durada_prevista":1500,"durada_real":1500,"estat":"complet","llibre_id":144,"pagina_inicial":433,"pagina_final":456}]
+[{"tipus":"treball","data":"2026-07-28","hora_inici":"23:06:24","hora_fi":"23:36:01","durada_prevista":1500,"durada_real":1500,"estat":"complet","llibre_id":144,"pagina_inicial":433,"pagina_final":456},{"tipus":"descans","data":"2026-07-28","hora_inici":"23:36:05","hora_fi":"23:37:23","durada_prevista":300,"durada_real":78,"estat":"parcial"}]
