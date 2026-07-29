@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.6.2';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -1284,15 +1284,19 @@ function renderPomodoro() {
       </div>`;
   } else {
     contingutCentral = `
-      <div class="pomo-tipus" style="color:${colorTipus};">${etiquetaTipus}</div>
-      <div class="pomo-temps">${formatTemps(pomo.enCurs ? pomo.restant : (pomo.tipus === 'treball' ? cfg.durada_treball : cfg.durada_descans))}</div>
-      <div class="pomo-punts">${punts}</div>
-      <div class="pomo-controls">
-        ${!pomo.enCurs || pomo.pausat
-          ? `<button class="pomo-btn-gran" id="pomo-play">${icona('play', 26)}</button>`
-          : `<button class="pomo-btn-gran" id="pomo-pausa">${icona('pausa', 24)}</button>`}
-        <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}
-                title="${pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar'}">${icona('stop', 20)}</button>
+      <div class="pomo-tipus-punts">
+        <span class="pomo-tipus" style="color:${colorTipus};">${etiquetaTipus}</span>
+        <span class="pomo-punts">${punts}</span>
+      </div>
+      <div class="pomo-rellotge-controls">
+        <div class="pomo-temps">${formatTemps(pomo.enCurs ? pomo.restant : (pomo.tipus === 'treball' ? cfg.durada_treball : cfg.durada_descans))}</div>
+        <div class="pomo-controls">
+          ${!pomo.enCurs || pomo.pausat
+            ? `<button class="pomo-btn-gran" id="pomo-play">${icona('play', 22)}</button>`
+            : `<button class="pomo-btn-gran" id="pomo-pausa">${icona('pausa', 19)}</button>`}
+          <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}
+                  title="${pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar'}">${icona('stop', 15)}</button>
+        </div>
       </div>`;
   }
 
@@ -1314,13 +1318,14 @@ function renderPomodoro() {
   }
 
   const llibreActualHtml = pomo.llibreId
-    ? `<div class="pomo-llibre-actiu">${icona('llibre', 15)} ${escapeHtml(pomo.llibreTitol)}</div>
-       ${projeccioHtml}
-       <div class="pomo-pagina-inicial-fila">
-         <label for="pomo-pagina-inicial">Pàgina inicial:</label>
+    ? `<div class="pomo-llibre-pag-fila">
+         ${icona('llibre', 14)}
+         <span class="titol">${escapeHtml(pomo.llibreTitol)}</span>
+         <label class="sep" for="pomo-pagina-inicial">· pàg.</label>
          <input type="number" id="pomo-pagina-inicial" min="0"
                 value="${paginaMostrada}" ${pomo.enCurs ? 'disabled' : ''}>
-       </div>`
+       </div>
+       ${projeccioHtml}`
     : '';
 
   let seccioLlibres = '';

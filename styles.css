@@ -530,7 +530,7 @@ main { flex: 1; padding: 14px 12px 80px; }
 /* ── Pomodoro ─────────────────────────────────────────────────────────── */
 .pomo-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 13px;
+  margin-bottom: 10px;
 }
 .pomo-header-titol { font-size: 18px; font-weight: 800; color: var(--orange); }
 
@@ -538,32 +538,41 @@ main { flex: 1; padding: 14px 12px 80px; }
   background: var(--bg-card);
   border: 1.5px solid var(--border-lt);
   border-radius: 20px;
-  padding: 25px 20px;
+  padding: 16px 20px;
   display: flex; flex-direction: column; align-items: center;
   text-align: center;
 }
+
+/* Fila 1: FOCUS/DESCANS + punts del cicle, junts */
+.pomo-tipus-punts {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin-bottom: 4px;
+}
 .pomo-tipus {
   font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
-  margin-bottom: 8px;
+}
+.pomo-punts { display: flex; align-items: center; }
+
+/* Fila 2: rellotge + controls, costat a costat */
+.pomo-rellotge-controls {
+  display: flex; align-items: center; justify-content: center; gap: 20px;
 }
 .pomo-temps {
   font-size: 48px; font-weight: 800; color: var(--text-hi);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
-.pomo-punts { margin-top: 12px; margin-bottom: 5px; }
 .pomo-controls {
-  display: flex; align-items: center; gap: 18px;
-  margin-top: 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
 .pomo-btn-gran {
-  width: 56px; height: 56px; border-radius: 50%;
+  width: 46px; height: 46px; border-radius: 50%;
   background: var(--orange); color: #1A1200;
   border: none; display: flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
 .pomo-btn-mitja {
-  width: 41px; height: 41px; border-radius: 50%;
+  width: 34px; height: 34px; border-radius: 50%;
   background: var(--bg-hover); color: var(--text-mid);
   border: 1px solid var(--border-lt);
   display: flex; align-items: center; justify-content: center;
@@ -585,12 +594,31 @@ main { flex: 1; padding: 14px 12px 80px; }
   line-height: 1.5;
 }
 
-.pomo-llibre-actiu {
-  display: flex; align-items: center; gap: 6px;
+/* Fila combinada: icona + títol del llibre + "· pàg." + input de pàgina inicial */
+.pomo-llibre-pag-fila {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
   font-size: 12.5px; color: var(--orange); font-weight: 700;
-  margin-bottom: 14px;
+  margin-bottom: 4px;
   text-align: center;
 }
+.pomo-llibre-pag-fila .titol {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;
+}
+.pomo-llibre-pag-fila .sep {
+  color: var(--text-mid); font-weight: 400; font-size: 12.5px;
+}
+.pomo-llibre-pag-fila input {
+  width: 56px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-lt);
+  border-radius: 8px;
+  color: var(--text-hi);
+  font-size: 14px; font-weight: 700;
+  padding: 3px 6px;
+  text-align: center;
+}
+.pomo-llibre-pag-fila input:disabled { opacity: 0.6; }
+.pomo-llibre-pag-fila input:focus { border-color: var(--orange); outline: none; }
 
 .pomo-vista {
   display: flex; flex-direction: column;
@@ -671,32 +699,12 @@ main { flex: 1; padding: 14px 12px 80px; }
   border-radius: 20px; padding: 2px 9px;
 }
 
-.pomo-pagina-inicial-fila {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin-bottom: 14px; margin-top: -4px;
-}
-.pomo-pagina-inicial-fila label {
-  font-size: 12.5px; color: var(--text-mid);
-}
-.pomo-pagina-inicial-fila input {
-  width: 70px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-lt);
-  border-radius: 8px;
-  color: var(--text-hi);
-  font-size: 14px; font-weight: 700;
-  padding: 5px 8px;
-  text-align: center;
-}
-.pomo-pagina-inicial-fila input:disabled { opacity: 0.6; }
-.pomo-pagina-inicial-fila input:focus { border-color: var(--orange); outline: none; }
-
 .card-llibre-pomo-proj {
   font-size: 10.5px; color: var(--orange); margin-top: 4px; font-weight: 600;
 }
 
 .pomo-projeccio {
   text-align: center; font-size: 12px; color: var(--text-mid);
-  margin-bottom: 10px; margin-top: -6px;
+  margin-bottom: 8px;
 }
 .pomo-projeccio.ajustat { color: var(--green); font-weight: 600; }
