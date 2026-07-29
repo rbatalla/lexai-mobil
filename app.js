@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.6.1';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -102,6 +102,31 @@ let state = {
 // Categories de Reptes que compten per al comptador de copes (6 en total:
 // les 4 de llibres + Còmic + Llibres-total com una copa més del conjunt).
 const REPTES_CATEGORIES_COPA = 6;
+
+// ── Wake Lock: evita que la pantalla s'apagui/bloquegi mentre hi ha un
+// focus o descans en marxa. Suportat a navegadors moderns (Safari iOS
+// 16.4+, Chrome/Android); als que no ho suporten, simplement no fa res
+// (no és crític, l'app funciona igual, només cal despertar la pantalla
+// manualment de tant en tant).
+let _wakeLock = null;
+
+async function _activarWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    }
+  } catch (e) {
+    _wakeLock = null; // permís denegat, sense bateria suficient, etc. -- ignorar
+  }
+}
+
+function _desactivarWakeLock() {
+  if (_wakeLock) {
+    try { _wakeLock.release(); } catch (e) { /* ja alliberat */ }
+    _wakeLock = null;
+  }
+}
 
 // ── Estat del temporitzador Pomodoro (no persistit; si tanques l'app amb
 // un pomodoro en marxa, es perd — igual que passaria si perdessis el mòbil
@@ -471,6 +496,7 @@ function pomoIniciarConfirmat() {
   }
   clearInterval(pomo.interval);
   pomo.interval = setInterval(pomoTick, 1000);
+  _activarWakeLock();
   renderPomodoro();
 }
 
@@ -495,6 +521,7 @@ function pomoPausar() {
   if (!pomo.enCurs || pomo.pausat) return;
   pomo.pausat = true;
   clearInterval(pomo.interval);
+  _desactivarWakeLock();
   renderPomodoro();
 }
 
@@ -507,6 +534,7 @@ function pomoAturar() {
     registrarSessioPomodoro(pomo.tipus === 'descans' ? 'cancelat' : 'parcial', durada_real);
   }
   clearInterval(pomo.interval);
+  _desactivarWakeLock();
   pomo = {
     ...pomo, enCurs: false, pausat: false, restant: 0, interval: null,
     esperantConfirmacio: false,
@@ -685,6 +713,7 @@ function pomoProuPerAra() {
   pomo.esperantConfirmacio = false;
   pomo.tipus = 'treball';
   pomo.restant = 0;
+  _desactivarWakeLock();
   renderPomodoro();
 }
 
@@ -1582,7 +1611,13 @@ function init() {
   // Pujada automàtica de pomodoros pendents: cada cop que l'app passa a
   // segon pla o es tanca ("cada cop que es tanca/actualitza l'app").
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) enviarPomodorosPendents();
+    if (document.hidden) {
+      enviarPomodorosPendents();
+    } else if (pomo.enCurs && !pomo.pausat) {
+      // El navegador allibera el Wake Lock sol quan la pantalla es bloqueja;
+      // cal tornar-lo a demanar en tornar a l'app si el focus segueix actiu.
+      _activarWakeLock();
+    }
   });
   window.addEventListener('pagehide', () => { enviarPomodorosPendents(); });
 
