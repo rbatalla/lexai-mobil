@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.2';
+const APP_VERSION = '1.6.3';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -235,12 +235,13 @@ async function pujarPomodorosAra() {
     return;
   }
   mostrarToast(`Pujant ${pendents.length} pomodoro(s)...`);
-  await enviarPomodorosPendents();
+  const resultat = await enviarPomodorosPendents();
   const encaraPendents = obtenirPomodorosPendents().length;
   if (!encaraPendents) {
     mostrarToast(`✓ ${pendents.length} pomodoro(s) pujats a GitHub.`);
   } else {
-    mostrarToast('No s\'ha pogut pujar (revisa el token o la connexió) -- es reintentarà.');
+    const motiu = (resultat && resultat.motiu) ? resultat.motiu : 'motiu desconegut';
+    mostrarToast(`No s'ha pogut pujar: ${motiu} -- es reintentarà.`);
   }
 }
 
@@ -361,9 +362,9 @@ function incrementarComptadorAvui() {
 
 async function enviarPomodorosPendents() {
   const pendents = obtenirPomodorosPendents();
-  if (!pendents.length) return;
+  if (!pendents.length) return { ok: true };
   const token = localStorage.getItem(GITHUB_TOKEN_KEY);
-  if (!token) return; // sense token configurat, es queden pendents localment
+  if (!token) return { ok: false, motiu: 'sense token configurat' };
   const repo = obtenirRepoGithub();
   const url = `https://api.github.com/repos/${repo}/contents/${POMODORO_PATH}`;
   try {
@@ -385,7 +386,7 @@ async function enviarPomodorosPendents() {
         } catch (e) { /* contingut il·legible -> es continua només amb els locals */ }
       }
     } else if (getResp.status !== 404) {
-      return; // error temporal, es reintentarà en el proper trigger
+      return { ok: false, motiu: `error llegint el fitxer (HTTP ${getResp.status})` };
     }
 
     // Fusió, no sobreescriptura: si l'escriptori encara no ha consumit
@@ -406,9 +407,16 @@ async function enviarPomodorosPendents() {
     });
     if (putResp.ok) {
       localStorage.removeItem(POMODORO_PENDENTS_KEY);
+      return { ok: true };
     }
+    let detall = '';
+    try {
+      const errJson = await putResp.json();
+      detall = errJson && errJson.message ? errJson.message : '';
+    } catch (e) { /* resposta sense JSON llegible */ }
+    return { ok: false, motiu: `HTTP ${putResp.status}${detall ? ' · ' + detall : ''}` };
   } catch (e) {
-    console.warn('Error pujant pomodoros (es reintentarà):', e);
+    return { ok: false, motiu: (e && e.message) ? e.message : 'error de xarxa' };
   }
 }
 
