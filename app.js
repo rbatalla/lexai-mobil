@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.5.9';
+const APP_VERSION = '1.6.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -501,11 +501,17 @@ function pomoPausar() {
 function pomoAturar() {
   if (!pomo.enCurs) return;
   const durada_real = pomo.total - pomo.restant;
-  if (durada_real > 10) { // no val la pena desar interrupcions immediates
-    registrarSessioPomodoro('parcial', durada_real);
+  // Un descans cancel·lat no és una lectura interrompuda -- es guarda amb
+  // un estat propi ('cancelat') i mai amb 'parcial' (que és per treball).
+  if (durada_real > 10) {
+    registrarSessioPomodoro(pomo.tipus === 'descans' ? 'cancelat' : 'parcial', durada_real);
   }
   clearInterval(pomo.interval);
-  pomo = { ...pomo, enCurs: false, pausat: false, restant: 0, interval: null, esperantConfirmacio: false };
+  pomo = {
+    ...pomo, enCurs: false, pausat: false, restant: 0, interval: null,
+    esperantConfirmacio: false,
+    tipus: 'treball',  // clau: si no, el proper ▶ reprenia un altre descans
+  };
   renderPomodoro();
 }
 
@@ -1256,7 +1262,8 @@ function renderPomodoro() {
         ${!pomo.enCurs || pomo.pausat
           ? `<button class="pomo-btn-gran" id="pomo-play">${icona('play', 26)}</button>`
           : `<button class="pomo-btn-gran" id="pomo-pausa">${icona('pausa', 24)}</button>`}
-        <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}>${icona('stop', 20)}</button>
+        <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}
+                title="${pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar'}">${icona('stop', 20)}</button>
       </div>`;
   }
 
