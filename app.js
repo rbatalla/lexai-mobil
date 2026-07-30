@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.3';
+const APP_VERSION = '1.6.4';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -671,7 +671,15 @@ function pomoAcabarContinuar(paginaFinal) {
       const llibreActualitzat = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
       if (llibreActualitzat) {
         llibreActualitzat.pagina_actual = paginaFinal;
-        if (typeof llibreActualitzat.pomodoros_restants === 'number') {
+        // Recalculem amb la MATEIXA fórmula que la projecció de la caixa de
+        // dalt (pàgines restants / pàg per pomodoro), en lloc de restar-hi 1
+        // a cegues -- si aquell pomodoro concret ha llegit més o menys
+        // pàgines que la mitjana, un simple "-1" es desalineava del número
+        // que mostra la caixa de dalt.
+        if (llibreActualitzat.pag_per_pomodoro && llibreActualitzat.pagines) {
+          const pagRestants = Math.max(0, llibreActualitzat.pagines - paginaFinal);
+          llibreActualitzat.pomodoros_restants = Math.ceil(pagRestants / llibreActualitzat.pag_per_pomodoro);
+        } else if (typeof llibreActualitzat.pomodoros_restants === 'number') {
           llibreActualitzat.pomodoros_restants = Math.max(0, llibreActualitzat.pomodoros_restants - 1);
         }
         llibreActualitzat.darrer_focus = new Date().toISOString().slice(0, 10);
