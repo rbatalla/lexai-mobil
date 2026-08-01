@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.4';
+const APP_VERSION = '1.6.5';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -95,6 +95,7 @@ let state = {
   llibresEnCurs: [], // [{id, titol, autor, pagines, pagina_actual}]
   mesos: [],      // llista ordenada de 'YYYY-MM' presents a les previsions
   mesIdx: 0,
+  mesosTancats: [],  // mesos (YYYY-MM) tancats a l'escriptori
   tab: 'previsions',  // 'previsions' | 'sagues' | 'tbr' | 'reptes' | 'pomodoro'
   tbrFiltreCategoria: '',  // '' = Tot | 'comic' | 'genere' | 'no_ficcio' | 'mainstream'
 };
@@ -153,7 +154,7 @@ let pomo = {
 function carregarDades() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [] };
+    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [] };
     const d = JSON.parse(raw);
     return {
       previsions: d.previsions || [],
@@ -161,10 +162,11 @@ function carregarDades() {
       tbr: d.tbr || [],
       reptes: d.reptes || null,
       llibresEnCurs: d.llibresEnCurs || [],
+      mesosTancats: d.mesosTancats || [],
     };
   } catch (e) {
     console.error('Error llegint dades locals:', e);
-    return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [] };
+    return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [] };
   }
 }
 
@@ -737,6 +739,11 @@ function pomoProuPerAra() {
 
 function mesosDisponibles(rows) {
   const set = new Set(rows.map(r => r.mes_objectiu).filter(Boolean));
+  // Sempre s'hi inclou el mes en curs, encara que encara no tingui cap
+  // previsió -- si no, en obrir l'app un dia 1 sense res creat per aquest
+  // mes, el fallback queda enganxat al mes més antic de la llista en lloc
+  // d'obrir en el mes real d'avui.
+  set.add(new Date().toISOString().slice(0, 7));
   return Array.from(set).sort();
 }
 
@@ -813,12 +820,14 @@ function aplicarNovesDades(previsionsRows, extra, meta) {
     tbr: extra ? (extra.tbr || []) : actual.tbr,
     reptes: extra ? (extra.reptes || null) : actual.reptes,
     llibresEnCurs: extra ? (extra.llibresEnCurs || []) : (actual.llibresEnCurs || []),
+    mesosTancats: extra ? (extra.mesosTancats || []) : (actual.mesosTancats || []),
   };
   state.previsions = noves.previsions;
   state.sagues = noves.sagues;
   state.tbr = noves.tbr;
   state.reptes = noves.reptes;
   state.llibresEnCurs = noves.llibresEnCurs;
+  state.mesosTancats = noves.mesosTancats;
   desarDades(noves);
   desarMeta(meta);
 
@@ -876,6 +885,7 @@ async function actualitzarDesDeGithub() {
     tbr: Array.isArray(dades.tbr) ? dades.tbr : [],
     reptes: dades.reptes || null,
     llibresEnCurs: Array.isArray(dades.llibres_en_curs) ? dades.llibres_en_curs : [],
+    mesosTancats: Array.isArray(dades.mesos_tancats) ? dades.mesos_tancats : [],
   }, {
     font: 'github',
     data_importacio: new Date().toISOString(),
@@ -946,7 +956,9 @@ function renderPrevisions() {
   document.getElementById('btn-mes-seg').style.visibility = 'visible';
   const mesActual = state.mesos[state.mesIdx];
   const { text, any } = formatMes(mesActual);
-  document.getElementById('mes-label').innerHTML = `${text} <small>${any}</small>`;
+  const tancat = (state.mesosTancats || []).includes(mesActual);
+  document.getElementById('mes-label').innerHTML =
+    `${tancat ? '🔒 ' : ''}${text} <small>${any}</small>`;
   document.getElementById('btn-mes-ant').disabled = state.mesIdx <= 0;
   document.getElementById('btn-mes-seg').disabled = state.mesIdx >= state.mesos.length - 1;
 
@@ -1592,6 +1604,7 @@ function init() {
   state.tbr = dades.tbr;
   state.reptes = dades.reptes;
   state.llibresEnCurs = dades.llibresEnCurs || [];
+  state.mesosTancats = dades.mesosTancats || [];
   state.mesos = mesosDisponibles(state.previsions);
   const mesActual = new Date().toISOString().slice(0, 7);
   const idxActual = state.mesos.indexOf(mesActual);
