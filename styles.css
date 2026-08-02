@@ -363,6 +363,23 @@ main { flex: 1; padding: 14px 12px 80px; }
   font-size: 12.5px; color: var(--text-mid); min-height: 16px; margin-bottom: 2px;
 }
 
+.pagina-final-check {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 13.5px; color: var(--text-hi); font-weight: 600;
+  margin: 4px 0 10px; cursor: pointer;
+}
+.pagina-final-check input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: var(--orange); cursor: pointer;
+}
+
+.pomo-link-finalitzar {
+  display: block; width: 100%; margin-top: 12px;
+  background: transparent; border: none;
+  color: var(--text-lo); font-size: 12px; text-decoration: underline;
+  text-align: center; line-height: 1.4; cursor: pointer;
+}
+.pomo-link-finalitzar:active { color: var(--orange); }
+
 .confirmacio-botons {
   display: flex; gap: 10px; justify-content: center; margin-top: 6px;
 }

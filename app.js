@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.5';
+const APP_VERSION = '1.6.7';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -603,7 +603,12 @@ function mostrarConfirmacio(titol, missatge, textSi, textNo, onConfirmar) {
   });
 }
 
-function mostrarModalPaginaFinal() {
+function pomoObrirFinalitzarAnticipat() {
+  if (!pomo.enCurs || pomo.tipus !== 'treball' || !pomo.llibreId) return;
+  mostrarModalPaginaFinal(true);
+}
+
+function mostrarModalPaginaFinal(anticipat = false) {
   const llibre = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
   const inicial = pomo.paginaInicial || 0;
   const ritme = (llibre && llibre.pag_per_pomodoro) ? Math.round(llibre.pag_per_pomodoro) : null;
@@ -614,7 +619,7 @@ function mostrarModalPaginaFinal() {
   overlay.id = 'modal-pagina-final';
   overlay.innerHTML = `
     <div class="modal-caixa modal-pagina-final-caixa">
-      <div class="modal-titol">Pàgina final</div>
+      <div class="modal-titol">${anticipat ? 'Finalitzar pomodoro ara' : 'Pàgina final'}</div>
       <div class="modal-linia discreta">${escapeHtml(pomo.llibreTitol || '')} · inici: ${inicial}</div>
       <div class="pagina-final-stepper">
         <button type="button" class="pagina-final-btn" id="pf-menys" aria-label="Una pàgina menys">−</button>
@@ -622,6 +627,12 @@ function mostrarModalPaginaFinal() {
         <button type="button" class="pagina-final-btn" id="pf-mes" aria-label="Una pàgina més">+</button>
       </div>
       <div class="pagina-final-pct" id="pf-pct"></div>
+      ${anticipat ? `
+        <label class="pagina-final-check">
+          <input type="checkbox" id="pf-llibre-acabat">
+          He acabat el llibre
+        </label>
+      ` : ''}
       <button type="button" id="pf-confirmar">Confirmar</button>
     </div>`;
   document.body.appendChild(overlay);
@@ -651,9 +662,58 @@ function mostrarModalPaginaFinal() {
     actualitzarPct();
   });
   overlay.querySelector('#pf-confirmar').addEventListener('click', () => {
+    const chkAcabat = overlay.querySelector('#pf-llibre-acabat');
+    const llibreAcabat = anticipat && chkAcabat && chkAcabat.checked;
     document.body.removeChild(overlay);
-    pomoAcabarContinuar(valor);
+    if (anticipat) {
+      pomoFinalitzarAnticipatConfirmar(valor, llibreAcabat);
+    } else {
+      pomoAcabarContinuar(valor);
+    }
   });
+}
+
+function pomoFinalitzarAnticipatConfirmar(paginaFinal, llibreAcabat) {
+  // Finalitza el pomodoro ARA MATEIX (no ha arribat a 0): es guarda com a
+  // 'parcial' (incomplet, no ha durat el temps previst) però -- a diferència
+  // d'"Aturar" -- SÍ que es demana la pàgina final i es permet marcar el
+  // llibre com a acabat. És la via pensada per als casos on ja has llegit
+  // (encara que no s'hagi completat el temps) i no vols perdre-ho.
+  clearInterval(pomo.interval);
+  _desactivarWakeLock();
+  const durada_real = pomo.total - pomo.restant;
+  registrarSessioPomodoro('parcial', durada_real, paginaFinal, llibreAcabat);
+  pomo.cicleNum = (pomo.cicleNum + 1) % 4;
+  incrementarComptadorAvui();
+
+  const llibreActualitzat = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
+  if (llibreActualitzat) {
+    llibreActualitzat.pagina_actual = paginaFinal;
+    llibreActualitzat.darrer_focus = new Date().toISOString().slice(0, 10);
+    if (llibreAcabat) {
+      // El llibre ja no és "en curs" -- el traiem de la llista en local.
+      // L'escriptori el marcarà com a Llegit en importar aquest pomodoro
+      // (flag llibre_acabat), i la propera sincronització confirmarà que
+      // ja no hi surt.
+      state.llibresEnCurs = state.llibresEnCurs.filter(l => l.id !== pomo.llibreId);
+    } else if (llibreActualitzat.pag_per_pomodoro && llibreActualitzat.pagines) {
+      const pagRestants = Math.max(0, llibreActualitzat.pagines - paginaFinal);
+      llibreActualitzat.pomodoros_restants = Math.ceil(pagRestants / llibreActualitzat.pag_per_pomodoro);
+    }
+    desarEstatLlibresEnCurs();
+  }
+  marcarUltimUsLlibre(pomo.llibreId);
+
+  // Directament a punt per a un nou Focus -- no té sentit passar per la
+  // pantalla de "Pomodoro completat!" quan no ha durat els minuts sencers.
+  pomo = {
+    ...pomo, enCurs: false, pausat: false, restant: 0, interval: null,
+    esperantConfirmacio: false, tipus: 'treball',
+  };
+  mostrarToast(llibreAcabat
+    ? '✓ Pomodoro parcial desat i llibre marcat com a acabat.'
+    : '✓ Pomodoro parcial desat.');
+  renderPomodoro();
 }
 
 function pomoAcabarContinuar(paginaFinal) {
@@ -697,7 +757,7 @@ function pomoAcabarContinuar(paginaFinal) {
   renderPomodoro();
 }
 
-function registrarSessioPomodoro(estat, durada_real, paginaFinal = null) {
+function registrarSessioPomodoro(estat, durada_real, paginaFinal = null, llibreAcabat = false) {
   const ara = new Date();
   const sessio = {
     tipus: pomo.tipus,
@@ -712,6 +772,7 @@ function registrarSessioPomodoro(estat, durada_real, paginaFinal = null) {
     sessio.llibre_id = pomo.llibreId;
     sessio.pagina_inicial = pomo.paginaInicial;
     if (paginaFinal !== null) sessio.pagina_final = paginaFinal;
+    if (llibreAcabat) sessio.llibre_acabat = true;
   }
   afegirPomodoroPendent(sessio);
   enviarPomodorosPendents(); // best-effort, no bloqueja
@@ -1325,7 +1386,12 @@ function renderPomodoro() {
           <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}
                   title="${pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar'}">${icona('stop', 15)}</button>
         </div>
-      </div>`;
+      </div>
+      ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
+        <button class="pomo-link-finalitzar" id="pomo-finalitzar">
+          He acabat aquest pomodoro ara mateix (p. ex. he acabat el llibre)
+        </button>
+      ` : ''}`;
   }
 
   const llibreSeleccionat = pomo.llibreId
@@ -1444,6 +1510,8 @@ function renderPomodoro() {
   if (bPausa) bPausa.addEventListener('click', pomoPausar);
   const bStop = document.getElementById('pomo-stop');
   if (bStop) bStop.addEventListener('click', pomoAturar);
+  const bFinalitzar = document.getElementById('pomo-finalitzar');
+  if (bFinalitzar) bFinalitzar.addEventListener('click', pomoObrirFinalitzarAnticipat);
   const bContinuar = document.getElementById('pomo-continuar');
   if (bContinuar) bContinuar.addEventListener('click',
     pomo.tipus === 'treball' ? pomoContinuarDescans : pomoContinuarTreball);
