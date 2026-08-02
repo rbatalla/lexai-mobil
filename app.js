@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.8';
+const APP_VERSION = '1.6.9';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -638,6 +638,9 @@ function mostrarModalPaginaFinal(anticipat = false) {
         </label>
       ` : ''}
       <button type="button" id="pf-confirmar">Confirmar</button>
+      ${anticipat ? `
+        <button type="button" id="pf-cancelar">Cancel·lar</button>
+      ` : ''}
     </div>`;
   document.body.appendChild(overlay);
 
@@ -680,6 +683,15 @@ function mostrarModalPaginaFinal(anticipat = false) {
       pomoAcabarContinuar(valor);
     }
   });
+  const bCancelar = overlay.querySelector('#pf-cancelar');
+  if (bCancelar) {
+    bCancelar.addEventListener('click', () => {
+      // No es toca res: el focus (en marxa o pausat) segueix exactament
+      // igual que abans d'obrir aquest modal -- no s'atura ni es registra
+      // cap sessió fins que es prem "Confirmar".
+      document.body.removeChild(overlay);
+    });
+  }
 }
 
 function pomoFinalitzarAnticipatConfirmar(paginaFinal, llibreAcabat) {

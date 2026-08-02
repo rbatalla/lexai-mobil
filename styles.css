@@ -381,6 +381,14 @@ main { flex: 1; padding: 14px 12px 80px; }
 }
 .pagina-final-mes10:active { background: var(--orange); color: #1A1200; }
 
+.modal-caixa #pf-cancelar {
+  margin-top: 8px;
+  background: transparent;
+  color: var(--text-mid);
+  border: 1px solid var(--border-lt);
+}
+.modal-caixa #pf-cancelar:active { border-color: var(--text-mid); }
+
 .confirmacio-botons {
   display: flex; gap: 10px; justify-content: center; margin-top: 6px;
 }
