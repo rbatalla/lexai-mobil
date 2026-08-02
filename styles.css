@@ -372,13 +372,14 @@ main { flex: 1; padding: 14px 12px 80px; }
   width: 18px; height: 18px; accent-color: var(--orange); cursor: pointer;
 }
 
-.pomo-link-finalitzar {
-  display: block; width: 100%; margin-top: 12px;
-  background: transparent; border: none;
-  color: var(--text-lo); font-size: 12px; text-decoration: underline;
-  text-align: center; line-height: 1.4; cursor: pointer;
+.pagina-final-mes10 {
+  display: flex; align-items: center; gap: 4px; justify-content: center;
+  margin: 0 auto 12px; width: fit-content;
+  background: var(--bg-hover); border: 1px solid var(--orange);
+  color: var(--orange); font-size: 12px; font-weight: 700;
+  border-radius: 20px; padding: 4px 12px; cursor: pointer;
 }
-.pomo-link-finalitzar:active { color: var(--orange); }
+.pagina-final-mes10:active { background: var(--orange); color: #1A1200; }
 
 .confirmacio-botons {
   display: flex; gap: 10px; justify-content: center; margin-top: 6px;
@@ -596,6 +597,9 @@ main { flex: 1; padding: 14px 12px 80px; }
   cursor: pointer;
 }
 .pomo-btn-mitja:disabled { opacity: 0.35; }
+.pomo-controls-fila-baixa { display: flex; align-items: center; gap: 8px; }
+.pomo-btn-finalitzar { border-color: var(--orange); color: var(--orange); }
+.pomo-btn-finalitzar:active { background: var(--orange); color: #1A1200; }
 
 .pomo-missatge { color: var(--green); margin-bottom: 8px; }
 .pomo-titol-fase { font-size: 18px; font-weight: 800; margin-bottom: 20px; }
@@ -636,6 +640,15 @@ main { flex: 1; padding: 14px 12px 80px; }
 }
 .pomo-llibre-pag-fila input:disabled { opacity: 0.6; }
 .pomo-llibre-pag-fila input:focus { border-color: var(--orange); outline: none; }
+.pomo-llibre-pag-fila button {
+  width: 22px; height: 22px; border-radius: 50%; padding: 0;
+  background: var(--bg-hover); border: 1px solid var(--orange);
+  color: var(--orange); font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+  cursor: pointer;
+}
+.pomo-llibre-pag-fila button:active { background: var(--orange); color: #1A1200; }
+.pomo-llibre-pag-fila button:disabled { opacity: 0.4; }
 
 .pomo-vista {
   display: flex; flex-direction: column;

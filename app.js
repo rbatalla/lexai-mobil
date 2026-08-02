@@ -2,10 +2,11 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.7';
+const APP_VERSION = '1.6.8';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
+  bandera: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
   importar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
   refrescar: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
@@ -627,6 +628,9 @@ function mostrarModalPaginaFinal(anticipat = false) {
         <button type="button" class="pagina-final-btn" id="pf-mes" aria-label="Una pàgina més">+</button>
       </div>
       <div class="pagina-final-pct" id="pf-pct"></div>
+      <button type="button" class="pagina-final-mes10" id="pf-mes10">
+        ${icona('piles', 12)} +10 pàg.
+      </button>
       ${anticipat ? `
         <label class="pagina-final-check">
           <input type="checkbox" id="pf-llibre-acabat">
@@ -658,6 +662,11 @@ function mostrarModalPaginaFinal(anticipat = false) {
   });
   overlay.querySelector('#pf-mes').addEventListener('click', () => {
     valor += 1;
+    lblValor.textContent = valor;
+    actualitzarPct();
+  });
+  overlay.querySelector('#pf-mes10').addEventListener('click', () => {
+    valor += 10;
     lblValor.textContent = valor;
     actualitzarPct();
   });
@@ -1383,15 +1392,16 @@ function renderPomodoro() {
           ${!pomo.enCurs || pomo.pausat
             ? `<button class="pomo-btn-gran" id="pomo-play">${icona('play', 22)}</button>`
             : `<button class="pomo-btn-gran" id="pomo-pausa">${icona('pausa', 19)}</button>`}
-          <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}
-                  title="${pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar'}">${icona('stop', 15)}</button>
+          <div class="pomo-controls-fila-baixa">
+            <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}
+                    title="${pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar'}">${icona('stop', 15)}</button>
+            ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
+              <button class="pomo-btn-mitja pomo-btn-finalitzar" id="pomo-finalitzar"
+                      title="Finalitzar aquest pomodoro ara (parcial)">${icona('bandera', 14)}</button>
+            ` : ''}
+          </div>
         </div>
-      </div>
-      ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
-        <button class="pomo-link-finalitzar" id="pomo-finalitzar">
-          He acabat aquest pomodoro ara mateix (p. ex. he acabat el llibre)
-        </button>
-      ` : ''}`;
+      </div>`;
   }
 
   const llibreSeleccionat = pomo.llibreId
@@ -1418,6 +1428,8 @@ function renderPomodoro() {
          <label class="sep" for="pomo-pagina-inicial">· pàg.</label>
          <input type="number" id="pomo-pagina-inicial" min="0"
                 value="${paginaMostrada}" ${pomo.enCurs ? 'disabled' : ''}>
+         <button type="button" id="pomo-pagina-inicial-mes" aria-label="Sumar una pàgina"
+                 ${pomo.enCurs ? 'disabled' : ''}>+</button>
        </div>
        ${projeccioHtml}`
     : '';
@@ -1497,6 +1509,15 @@ function renderPomodoro() {
     inputPagInicial.addEventListener('input', () => {
       const v = parseInt(inputPagInicial.value, 10);
       pomo.paginaInicial = isNaN(v) ? null : v;
+    });
+  }
+  const btnPagInicialMes = document.getElementById('pomo-pagina-inicial-mes');
+  if (btnPagInicialMes && inputPagInicial) {
+    btnPagInicialMes.addEventListener('click', () => {
+      const actual = parseInt(inputPagInicial.value, 10) || 0;
+      const nou = actual + 1;
+      inputPagInicial.value = nou;
+      pomo.paginaInicial = nou;
     });
   }
 
