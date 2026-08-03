@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.6.9';
+const APP_VERSION = '1.7.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -49,6 +49,8 @@ const POMODORO_CONFIG_KEY = 'lexaiMobil_pomodoro_config_v1';
 const POMODORO_PENDENTS_KEY = 'lexaiMobil_pomodoro_pendents_v1';
 const POMODORO_COMPTADOR_KEY = 'lexaiMobil_pomodoro_comptador_v1';
 const POMODORO_ULTIM_US_KEY = 'lexaiMobil_pomodoro_ultim_us_v1';
+const PREVISIONS_NOVES_PATH = 'data/lexai_mobil_previsions_noves.json';
+const PREVISIONS_NOVES_KEY = 'lexaiMobil_previsions_noves_v1';
 const POMODORO_CONFIG_DEFECTE = {
   durada_treball: 1500, durada_descans: 300, durada_desc_llarg: 900,
   so_activat: true, so_descans: false, so_durada: 5,
@@ -346,6 +348,217 @@ function afegirPomodoroPendent(sessio) {
   const pendents = obtenirPomodorosPendents();
   pendents.push(sessio);
   localStorage.setItem(POMODORO_PENDENTS_KEY, JSON.stringify(pendents));
+}
+
+// Mateixos valors interns que a LEXAI escriptori (vista_economia.py /
+// database.py) -- Bloc=tipus_contable, Motiu=categoria, Demanda i Afectació.
+const BLOCS_PREVISIO = [[1, 'Gènere'], [2, 'Còmic'], [3, 'Mainstream'], [4, 'No Ficció']];
+const CATEGORIES_PREVISIO = [
+  ['inesperat', 'Inesperat'], ['planificat', 'Planificat'], ['impulsiu', 'Impulsiu'],
+  ['opcional', 'Opcional'], ['backlog', 'Backlog'],
+];
+const DEMANDA_PREVISIO = [
+  ['opcional', 'Opcional'], ['imprescindible', 'Imprescindible'], ['obligat', 'Obligat'],
+  ['interes', 'Interès'], ['movible', 'Movible'], ['revisable', 'Revisable'], ['evitable', 'Evitable'],
+];
+const AFECTACIO_PREVISIO = [
+  ['coleccio', 'Col·lecció'], ['Descatalogat', 'Descatalogat'], ['Renovacio', 'Renovació'],
+];
+
+function obrirFormNovaPrevisio(mes) {
+  const { text: mesTxt, any: mesAny } = formatMes(mes);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-caixa modal-nova-previsio-caixa">
+      <div class="modal-titol">Nova previsió · ${mesTxt} ${mesAny}</div>
+
+      <div class="config-fila-text">
+        <label for="np-titol">Títol *</label>
+        <input type="text" id="np-titol" placeholder="Títol del llibre">
+      </div>
+      <div class="config-fila-text">
+        <label for="np-autor">Autor</label>
+        <input type="text" id="np-autor" placeholder="Autor">
+      </div>
+      <div class="config-fila-text">
+        <label for="np-editorial">Editorial</label>
+        <input type="text" id="np-editorial" placeholder="Editorial">
+      </div>
+
+      <div class="config-seccio">Classificació</div>
+      <div class="config-fila-text">
+        <label for="np-bloc">Bloc</label>
+        <select id="np-bloc">${BLOCS_PREVISIO.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+      </div>
+      <div class="config-fila-text">
+        <label for="np-motiu">Motiu</label>
+        <select id="np-motiu">${CATEGORIES_PREVISIO.map(([v, l]) => `<option value="${v}"${v === 'inesperat' ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+      <div class="config-fila-text">
+        <label for="np-demanda">Demanda</label>
+        <select id="np-demanda">${DEMANDA_PREVISIO.map(([v, l]) => `<option value="${v}"${v === 'opcional' ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+      <div class="config-fila-text">
+        <label for="np-afectacio">Afectació</label>
+        <select id="np-afectacio">${AFECTACIO_PREVISIO.map(([v, l]) => `<option value="${v}"${v === 'coleccio' ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+
+      <div class="config-seccio">Economia i dates</div>
+      <div class="config-fila-text">
+        <label for="np-preu">Preu estimat (€)</label>
+        <input type="number" id="np-preu" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="config-fila-text">
+        <label for="np-data-edicio">Data d'edició aprox.</label>
+        <input type="date" id="np-data-edicio">
+      </div>
+      <div class="config-fila-text">
+        <label for="np-data-comanda">Data de Comanda</label>
+        <input type="date" id="np-data-comanda">
+      </div>
+      <div class="config-check-fila">
+        <input type="checkbox" id="np-disponible">
+        <label for="np-disponible">Ja disponible</label>
+      </div>
+
+      <button type="button" id="np-desar">Afegir previsió</button>
+      <button type="button" id="np-cancelar">Cancel·lar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#np-cancelar').addEventListener('click', () => {
+    document.body.removeChild(overlay);
+  });
+
+  overlay.querySelector('#np-desar').addEventListener('click', () => {
+    const inpTitol = overlay.querySelector('#np-titol');
+    const titol = inpTitol.value.trim();
+    if (!titol) {
+      inpTitol.style.borderColor = '#E74C3C';
+      inpTitol.focus();
+      return;
+    }
+    const blocId = parseInt(overlay.querySelector('#np-bloc').value, 10);
+    const blocLabel = (BLOCS_PREVISIO.find(([v]) => v === blocId) || [null, ''])[1];
+    const preuVal = parseFloat(overlay.querySelector('#np-preu').value);
+    const clientId = `mob-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const nova = {
+      client_id: clientId,
+      titol,
+      autor: overlay.querySelector('#np-autor').value.trim() || null,
+      editorial: overlay.querySelector('#np-editorial').value.trim() || null,
+      contable_id: blocId,
+      categoria: overlay.querySelector('#np-motiu').value,
+      demanda: overlay.querySelector('#np-demanda').value,
+      afectacio: overlay.querySelector('#np-afectacio').value,
+      mes_objectiu: mes,
+      estat: 'pendent',
+      import_previst: isNaN(preuVal) ? null : preuVal,
+      data_edicio_aprox: overlay.querySelector('#np-data-edicio').value || null,
+      data_sortida_prevista: overlay.querySelector('#np-data-comanda').value || null,
+      ja_disponible: overlay.querySelector('#np-disponible').checked,
+      creat_el: new Date().toISOString(),
+    };
+
+    // Actualització optimista amb la mateixa forma que normalitzarFiles(),
+    // perquè es vegi i es comporti igual que una fila ja sincronitzada.
+    state.previsions.push({
+      id: clientId,
+      titol: nova.titol,
+      autor: nova.autor || '',
+      bloc: blocLabel,
+      categoria: nova.categoria,
+      estat: 'pendent',
+      mes_objectiu: nova.mes_objectiu,
+      import_previst: nova.import_previst,
+      import_real: null,
+      data_previsio: nova.data_sortida_prevista || '',
+      data_compra: '',
+      tenda: '',
+      marcat: false,
+    });
+    desarDades({
+      previsions: state.previsions, sagues: state.sagues, tbr: state.tbr,
+      reptes: state.reptes, llibresEnCurs: state.llibresEnCurs,
+      mesosTancats: state.mesosTancats,
+    });
+
+    afegirPrevisioNovaPendent(nova);
+    enviarPrevisionsNovesPendents(); // best-effort, no bloqueja
+
+    document.body.removeChild(overlay);
+    mostrarToast("✓ Previsió afegida (es sincronitzarà amb l'escriptori).");
+    renderPrevisions();
+  });
+}
+
+function obtenirPrevisionsNovesPendents() {
+  try {
+    const raw = localStorage.getItem(PREVISIONS_NOVES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function afegirPrevisioNovaPendent(prev) {
+  const pendents = obtenirPrevisionsNovesPendents();
+  pendents.push(prev);
+  localStorage.setItem(PREVISIONS_NOVES_KEY, JSON.stringify(pendents));
+}
+
+async function enviarPrevisionsNovesPendents() {
+  const pendents = obtenirPrevisionsNovesPendents();
+  if (!pendents.length) return { ok: true };
+  const token = localStorage.getItem(GITHUB_TOKEN_KEY);
+  if (!token) return { ok: false, motiu: 'sense token configurat' };
+  const repo = obtenirRepoGithub();
+  const url = `https://api.github.com/repos/${repo}/contents/${PREVISIONS_NOVES_PATH}`;
+  try {
+    let sha = null;
+    let remots = [];
+    const getResp = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    });
+    if (getResp.ok) {
+      const meta = await getResp.json();
+      sha = meta.sha;
+      if (meta.content) {
+        try {
+          const decodificat = decodeURIComponent(escape(atob(meta.content.replace(/\n/g, ''))));
+          const parsed = JSON.parse(decodificat);
+          if (Array.isArray(parsed)) remots = parsed;
+        } catch (e) { /* contingut il·legible -> es continua només amb els locals */ }
+      }
+    } else if (getResp.status !== 404) {
+      return { ok: false, motiu: `error llegint el fitxer (HTTP ${getResp.status})` };
+    }
+
+    // Fusió per client_id (identificador generat al mòbil en crear la
+    // previsió), mateix criteri que amb els pomodoros pendents.
+    const clausRemots = new Set(remots.map(p => p.client_id));
+    const unio = remots.concat(pendents.filter(p => !clausRemots.has(p.client_id)));
+
+    const contingut = btoa(unescape(encodeURIComponent(JSON.stringify(unio))));
+    const body = { message: 'LEXAI Mòbil: previsions noves', content: contingut };
+    if (sha) body.sha = sha;
+    const putResp = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (putResp.ok) {
+      localStorage.removeItem(PREVISIONS_NOVES_KEY);
+      return { ok: true };
+    }
+    let detall = '';
+    try {
+      const errJson = await putResp.json();
+      detall = errJson && errJson.message ? errJson.message : '';
+    } catch (e) { /* resposta sense JSON llegible */ }
+    return { ok: false, motiu: `HTTP ${putResp.status}${detall ? ' · ' + detall : ''}` };
+  } catch (e) {
+    return { ok: false, motiu: (e && e.message) ? e.message : 'error de xarxa' };
+  }
 }
 
 function obtenirComptadorAvui() {
@@ -959,8 +1172,10 @@ async function actualitzarDesDeGithub() {
   if (!localStorage.getItem(POMODORO_CONFIG_KEY) && dades.focus_config) {
     desarConfigPomodoro({ ...POMODORO_CONFIG_DEFECTE, ...dades.focus_config });
   }
-  // Aprofitem que hi ha connexió per intentar pujar pomodoros pendents.
+  // Aprofitem que hi ha connexió per intentar pujar pomodoros i previsions
+  // noves pendents.
   enviarPomodorosPendents();
+  enviarPrevisionsNovesPendents();
 
   aplicarNovesDades(rows, {
     sagues: Array.isArray(dades.sagues) ? dades.sagues : [],
@@ -1043,6 +1258,11 @@ function renderPrevisions() {
     `${tancat ? '🔒 ' : ''}${text} <small>${any}</small>`;
   document.getElementById('btn-mes-ant').disabled = state.mesIdx <= 0;
   document.getElementById('btn-mes-seg').disabled = state.mesIdx >= state.mesos.length - 1;
+  const btnNova = document.getElementById('btn-nova-previsio');
+  if (btnNova) {
+    btnNova.style.display = tancat ? 'none' : 'flex';
+    btnNova.onclick = () => obrirFormNovaPrevisio(mesActual);
+  }
 
   const rowsDelMes = state.previsions.filter(r => r.mes_objectiu === mesActual);
 
