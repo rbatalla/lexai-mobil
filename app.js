@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -930,9 +930,15 @@ function pomoFinalitzarAnticipatConfirmar(paginaFinal, llibreAcabat) {
       // (flag llibre_acabat), i la propera sincronització confirmarà que
       // ja no hi surt.
       state.llibresEnCurs = state.llibresEnCurs.filter(l => l.id !== pomo.llibreId);
-    } else if (llibreActualitzat.pag_per_pomodoro && llibreActualitzat.pagines) {
-      const pagRestants = Math.max(0, llibreActualitzat.pagines - paginaFinal);
-      llibreActualitzat.pomodoros_restants = Math.ceil(pagRestants / llibreActualitzat.pag_per_pomodoro);
+    } else {
+      const llegides = paginaFinal - (pomo.paginaInicial || 0);
+      if (!llibreActualitzat.pag_per_pomodoro && llegides > 0) {
+        llibreActualitzat.pag_per_pomodoro = llegides;
+      }
+      if (llibreActualitzat.pag_per_pomodoro && llibreActualitzat.pagines) {
+        const pagRestants = Math.max(0, llibreActualitzat.pagines - paginaFinal);
+        llibreActualitzat.pomodoros_restants = Math.ceil(pagRestants / llibreActualitzat.pag_per_pomodoro);
+      }
     }
     desarEstatLlibresEnCurs();
   }
@@ -967,6 +973,14 @@ function pomoAcabarContinuar(paginaFinal) {
       const llibreActualitzat = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
       if (llibreActualitzat) {
         llibreActualitzat.pagina_actual = paginaFinal;
+        // Primer focus d'aquest llibre: encara no hi ha cap ritme conegut
+        // (pag_per_pomodoro ve buit del sync). En lloc de deixar la
+        // targeta sense número, l'estimem ja amb aquesta única mostra —
+        // l'escriptori el refinarà amb la mitjana real un cop hi hagi
+        // més sessions.
+        if (!llibreActualitzat.pag_per_pomodoro && llegides > 0) {
+          llibreActualitzat.pag_per_pomodoro = llegides;
+        }
         // Recalculem amb la MATEIXA fórmula que la projecció de la caixa de
         // dalt (pàgines restants / pàg per pomodoro), en lloc de restar-hi 1
         // a cegues -- si aquell pomodoro concret ha llegit més o menys
