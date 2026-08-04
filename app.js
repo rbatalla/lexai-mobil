@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.7.2';
+const APP_VERSION = '1.7.3';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -750,7 +750,20 @@ function pomoPausar() {
 }
 
 function pomoAturar() {
-  if (!pomo.enCurs) return;
+  if (!pomo.enCurs) {
+    // Cap focus actiu: si encara hi ha un llibre seleccionat (típicament
+    // perquè s'acaba de marcar com a acabat i ja no surt a la llista
+    // d'"Escollir llibre", sense targeta per poder-lo desmarcar tocant-hi),
+    // aprofitem el botó per netejar la selecció i deixar-ho a punt per
+    // triar-ne un altre.
+    if (pomo.llibreId) {
+      pomo.llibreId = null;
+      pomo.llibreTitol = null;
+      pomo.paginaInicial = null;
+      renderPomodoro();
+    }
+    return;
+  }
   const durada_real = pomo.total - pomo.restant;
   // Un descans cancel·lat no és una lectura interrompuda -- es guarda amb
   // un estat propi ('cancelat') i mai amb 'parcial' (que és per treball).
@@ -1639,8 +1652,11 @@ function renderPomodoro() {
             ? `<button class="pomo-btn-gran" id="pomo-play">${icona('play', 22)}</button>`
             : `<button class="pomo-btn-gran" id="pomo-pausa">${icona('pausa', 19)}</button>`}
           <div class="pomo-controls-fila-baixa">
-            <button class="pomo-btn-mitja" id="pomo-stop" ${!pomo.enCurs ? 'disabled' : ''}
-                    title="${pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar'}">${icona('stop', 15)}</button>
+            <button class="pomo-btn-mitja" id="pomo-stop"
+                    ${(!pomo.enCurs && !pomo.llibreId) ? 'disabled' : ''}
+                    title="${pomo.enCurs
+                      ? (pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar')
+                      : 'Treure la selecció del llibre'}">${icona('stop', 15)}</button>
             ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
               <button class="pomo-btn-mitja pomo-btn-finalitzar" id="pomo-finalitzar"
                       title="Finalitzar aquest pomodoro ara (parcial)">${icona('bandera', 14)}</button>
