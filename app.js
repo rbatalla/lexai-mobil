@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.7.2';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -1552,12 +1552,13 @@ function renderCard(r) {
 
   const marcatCard = r.marcat ? ' marcat' : '';
   const mostraToggle = r.estat !== 'comprat';
-  const btnToggle = mostraToggle ? `
-    <div class="card-bottom">
-      <button class="btn-marcar${r.marcat ? ' actiu' : ''}" data-toggle-id="${escapeHtml(r.id)}">
-        ${r.marcat ? icona('check', 15) + ' El tinc a la mà' : icona('carret', 15) + ' Marcar (a la botiga)'}
-      </button>
-    </div>` : '';
+  if (mostraToggle) {
+    pills.push(`
+      <button class="pill-toggle${r.marcat ? ' actiu' : ''}" data-toggle-id="${escapeHtml(r.id)}"
+              title="${r.marcat ? 'El tinc a la mà — clic per desmarcar' : 'Marcar (a la botiga)'}">
+        ${r.marcat ? icona('check', 15) : icona('carret', 15)}
+      </button>`);
+  }
 
   return `
     <div class="card-llibre${marcatCard}">
@@ -1569,7 +1570,6 @@ function renderCard(r) {
         ${iconaCat}
       </div>
       <div class="card-meta">${pills.join('')}</div>
-      ${btnToggle}
     </div>`;
 }
 

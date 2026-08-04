@@ -253,6 +253,23 @@ main { flex: 1; padding: 14px 12px 80px; }
 .pill.tenda { color: var(--text-mid); }
 .pill.data { color: var(--text-lo); }
 
+.pill-toggle {
+  margin-left: auto;
+  width: 28px; height: 28px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-lt);
+  color: var(--text-mid);
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+.pill-toggle.actiu {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #1A1200;
+}
+
 .card-bottom {
   display: flex; justify-content: flex-end; margin-top: 10px;
 }
