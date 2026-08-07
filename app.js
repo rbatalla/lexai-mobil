@@ -1802,6 +1802,8 @@ function obrirFormNovaCita(llibreId) {
   const llibre = state.llibresEnCurs.find(l => l.id === llibreId);
   if (!llibre) return;
   const tagsSeleccionats = new Set();
+  let tipusSeleccionat = 'anotacio';
+  let impacteSeleccionat = 'standard';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -1824,14 +1826,11 @@ function obrirFormNovaCita(llibreId) {
         <label for="nc-tema">Tema (de què tracta)</label>
         <input type="text" id="nc-tema" placeholder="p. ex. vigilància algorísmica">
       </div>
-      <div class="config-fila-text">
-        <label for="nc-tipus">Tipus</label>
-        <select id="nc-tipus">${TIPUS_CITA.map(([v, l]) => `<option value="${v}"${v === 'anotacio' ? ' selected' : ''}>${l}</option>`).join('')}</select>
-      </div>
-      <div class="config-fila-text">
-        <label for="nc-impacte">Impacte</label>
-        <select id="nc-impacte">${IMPACTE_CITA.map(([v, l]) => `<option value="${v}"${v === 'standard' ? ' selected' : ''}>${l}</option>`).join('')}</select>
-      </div>
+      <div class="config-seccio" style="margin-top:6px;">Tipus</div>
+      <div class="tbr-filtres" id="nc-tipus-chips"></div>
+
+      <div class="config-seccio">Impacte</div>
+      <div class="tbr-filtres" id="nc-impacte-chips"></div>
 
       <div class="config-seccio">Tags</div>
       <div class="tbr-filtres" id="nc-tags-chips"></div>
@@ -1848,6 +1847,34 @@ function obrirFormNovaCita(llibreId) {
       <button type="button" id="nc-cancelar">Cancel·lar</button>
     </div>`;
   document.body.appendChild(overlay);
+
+  function renderTipusChips() {
+    const cont = overlay.querySelector('#nc-tipus-chips');
+    cont.innerHTML = TIPUS_CITA.map(([v, l]) => `
+      <button type="button" class="tbr-filtre-btn${v === tipusSeleccionat ? ' actiu' : ''}"
+              data-tipus="${v}">${l}</button>`).join('');
+    cont.querySelectorAll('[data-tipus]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        tipusSeleccionat = btn.getAttribute('data-tipus');
+        renderTipusChips();
+      });
+    });
+  }
+  renderTipusChips();
+
+  function renderImpacteChips() {
+    const cont = overlay.querySelector('#nc-impacte-chips');
+    cont.innerHTML = IMPACTE_CITA.map(([v, l]) => `
+      <button type="button" class="tbr-filtre-btn${v === impacteSeleccionat ? ' actiu' : ''}"
+              data-impacte="${v}">${l}</button>`).join('');
+    cont.querySelectorAll('[data-impacte]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        impacteSeleccionat = btn.getAttribute('data-impacte');
+        renderImpacteChips();
+      });
+    });
+  }
+  renderImpacteChips();
 
   function renderTagsChips() {
     const cont = overlay.querySelector('#nc-tags-chips');
@@ -1896,8 +1923,8 @@ function obrirFormNovaCita(llibreId) {
       pagina: overlay.querySelector('#nc-pagina').value.trim() || null,
       capitol: overlay.querySelector('#nc-capitol').value.trim() || null,
       tema: overlay.querySelector('#nc-tema').value.trim() || null,
-      tipus_cita: overlay.querySelector('#nc-tipus').value,
-      impacte: overlay.querySelector('#nc-impacte').value,
+      tipus_cita: tipusSeleccionat,
+      impacte: impacteSeleccionat,
       tags,
       nota_personal: overlay.querySelector('#nc-nota').value.trim() || null,
       creat_el: new Date().toISOString(),
