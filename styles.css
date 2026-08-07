@@ -468,6 +468,12 @@ main { flex: 1; padding: 14px 12px 80px; }
   color: var(--text-hi); font-size: 14px; font-weight: 500;
   padding: 7px 8px;
 }
+.config-fila-text textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; font-family: inherit;
+  background: var(--bg-hover); border: 1px solid var(--border-lt); border-radius: 8px;
+  color: var(--text-hi); font-size: 14px; font-weight: 500;
+  padding: 8px;
+}
 .modal-nova-previsio-caixa #np-desar { width: 100%; margin-top: 18px; }
 .modal-nova-previsio-caixa #np-cancelar {
   width: 100%; margin-top: 8px;
@@ -791,3 +797,36 @@ main { flex: 1; padding: 14px 12px 80px; }
   margin-bottom: 8px;
 }
 .pomo-projeccio.ajustat { color: var(--green); font-weight: 600; }
+
+/* ── Cites ──────────────────────────────────────────────────────────── */
+.cita-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  min-height: 180px;
+  touch-action: pan-y;
+}
+.cita-card-top {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.cita-tipus-badge {
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+  background: var(--orange-dim); color: var(--orange);
+}
+.cita-pagina { font-size: 12px; color: var(--text-lo); }
+.cita-text {
+  font-size: 14.5px; line-height: 1.55; font-style: italic; color: var(--text-hi);
+}
+.cita-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.cita-tag {
+  font-size: 11px; padding: 3px 9px; border-radius: 20px;
+  background: var(--bg-panel); color: var(--text-mid); border: 1px solid var(--border);
+}
+.cita-contador {
+  text-align: center; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--text-hi);
+}
+.cita-hint {
+  font-size: 10.5px; color: var(--text-lo); font-weight: 400; margin-top: 2px;
+}

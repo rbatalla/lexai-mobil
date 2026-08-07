@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.7.4';
+const APP_VERSION = '1.7.5';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -30,6 +30,7 @@ const ICONES = {
   play: '<polygon points="6 3 20 12 6 21 6 3"/>',
   pausa: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
   stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
+  cita: '<path d="M3 20l1.3 -3.9a9 8 0 1 1 3.4 2.9l-4.7 1"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/>',
 };
 
 function icona(nom, mida) {
@@ -51,6 +52,18 @@ const POMODORO_COMPTADOR_KEY = 'lexaiMobil_pomodoro_comptador_v1';
 const POMODORO_ULTIM_US_KEY = 'lexaiMobil_pomodoro_ultim_us_v1';
 const PREVISIONS_NOVES_PATH = 'data/lexai_mobil_previsions_noves.json';
 const PREVISIONS_NOVES_KEY = 'lexaiMobil_previsions_noves_v1';
+const CITES_NOVES_PATH = 'data/lexai_mobil_cites_noves.json';
+const CITES_NOVES_KEY = 'lexaiMobil_cites_noves_v1';
+// Mateixos vocabularis que TIPUS_CITA/IMPACTE_CITA a lexai/database.py —
+// canvien poc, es mantenen fixos aquí (com TBR_CATEGORIES) en lloc de
+// sincronitzar-los des de l'escriptori.
+const TIPUS_CITA = [
+  ['anotacio', 'Anotació'], ['humor', 'Humor'], ['curiositat', 'Curiositat'],
+  ['dada', 'Dada'], ['reflexio', 'Reflexió'], ['definicio', 'Definició'],
+];
+const IMPACTE_CITA = [
+  ['standard', 'Standard'], ['impactant', 'Impactant'], ['brutal', 'Brutal'],
+];
 const POMODORO_CONFIG_DEFECTE = {
   durada_treball: 1500, durada_descans: 300, durada_desc_llarg: 900,
   so_activat: true, so_descans: false, so_durada: 5,
@@ -99,8 +112,11 @@ let state = {
   mesos: [],      // llista ordenada de 'YYYY-MM' presents a les previsions
   mesIdx: 0,
   mesosTancats: [],  // mesos (YYYY-MM) tancats a l'escriptori
-  tab: 'previsions',  // 'previsions' | 'sagues' | 'tbr' | 'reptes' | 'pomodoro'
+  tab: 'previsions',  // 'previsions' | 'sagues' | 'tbr' | 'reptes' | 'cites' | 'pomodoro'
   tbrFiltreCategoria: '',  // '' = Tot | 'comic' | 'genere' | 'no_ficcio' | 'mainstream'
+  citesLlibreId: null,   // llibre seleccionat a la pestanya Cites
+  citesIdx: 0,            // índex de la cita mostrada dins d'aquest llibre
+  tagsCita: [],            // tags existents (per als chips del formulari)
 };
 
 // Categories de Reptes que compten per al comptador de copes (6 en total:
@@ -157,7 +173,7 @@ let pomo = {
 function carregarDades() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [] };
+    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [], tagsCita: [] };
     const d = JSON.parse(raw);
     return {
       previsions: d.previsions || [],
@@ -166,10 +182,11 @@ function carregarDades() {
       reptes: d.reptes || null,
       llibresEnCurs: d.llibresEnCurs || [],
       mesosTancats: d.mesosTancats || [],
+      tagsCita: d.tagsCita || [],
     };
   } catch (e) {
     console.error('Error llegint dades locals:', e);
-    return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [] };
+    return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [], tagsCita: [] };
   }
 }
 
@@ -548,6 +565,74 @@ async function enviarPrevisionsNovesPendents() {
     });
     if (putResp.ok) {
       localStorage.removeItem(PREVISIONS_NOVES_KEY);
+      return { ok: true };
+    }
+    let detall = '';
+    try {
+      const errJson = await putResp.json();
+      detall = errJson && errJson.message ? errJson.message : '';
+    } catch (e) { /* resposta sense JSON llegible */ }
+    return { ok: false, motiu: `HTTP ${putResp.status}${detall ? ' · ' + detall : ''}` };
+  } catch (e) {
+    return { ok: false, motiu: (e && e.message) ? e.message : 'error de xarxa' };
+  }
+}
+
+// ── Cites — pujada de cites noves (mateix patró que previsions noves) ──────
+
+function obtenirCitesNovesPendents() {
+  try {
+    const raw = localStorage.getItem(CITES_NOVES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function afegirCitaNovaPendent(cita) {
+  const pendents = obtenirCitesNovesPendents();
+  pendents.push(cita);
+  localStorage.setItem(CITES_NOVES_KEY, JSON.stringify(pendents));
+}
+
+async function enviarCitesNovesPendents() {
+  const pendents = obtenirCitesNovesPendents();
+  if (!pendents.length) return { ok: true };
+  const token = localStorage.getItem(GITHUB_TOKEN_KEY);
+  if (!token) return { ok: false, motiu: 'sense token configurat' };
+  const repo = obtenirRepoGithub();
+  const url = `https://api.github.com/repos/${repo}/contents/${CITES_NOVES_PATH}`;
+  try {
+    let sha = null;
+    let remots = [];
+    const getResp = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    });
+    if (getResp.ok) {
+      const meta = await getResp.json();
+      sha = meta.sha;
+      if (meta.content) {
+        try {
+          const decodificat = decodeURIComponent(escape(atob(meta.content.replace(/\n/g, ''))));
+          const parsed = JSON.parse(decodificat);
+          if (Array.isArray(parsed)) remots = parsed;
+        } catch (e) { /* contingut il·legible -> es continua només amb els locals */ }
+      }
+    } else if (getResp.status !== 404) {
+      return { ok: false, motiu: `error llegint el fitxer (HTTP ${getResp.status})` };
+    }
+
+    // Fusió per client_id, mateix criteri que amb previsions/pomodoros.
+    const clausRemots = new Set(remots.map(c => c.client_id));
+    const unio = remots.concat(pendents.filter(c => !clausRemots.has(c.client_id)));
+
+    const contingut = btoa(unescape(encodeURIComponent(JSON.stringify(unio))));
+    const body = { message: 'LEXAI Mòbil: cites noves', content: contingut };
+    if (sha) body.sha = sha;
+    const putResp = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (putResp.ok) {
+      localStorage.removeItem(CITES_NOVES_KEY);
       return { ok: true };
     }
     let detall = '';
@@ -1143,6 +1228,7 @@ function aplicarNovesDades(previsionsRows, extra, meta) {
     reptes: extra ? (extra.reptes || null) : actual.reptes,
     llibresEnCurs: extra ? (extra.llibresEnCurs || []) : (actual.llibresEnCurs || []),
     mesosTancats: extra ? (extra.mesosTancats || []) : (actual.mesosTancats || []),
+    tagsCita: extra ? (extra.tagsCita || []) : (actual.tagsCita || []),
   };
   state.previsions = noves.previsions;
   state.sagues = noves.sagues;
@@ -1150,6 +1236,7 @@ function aplicarNovesDades(previsionsRows, extra, meta) {
   state.reptes = noves.reptes;
   state.llibresEnCurs = noves.llibresEnCurs;
   state.mesosTancats = noves.mesosTancats;
+  state.tagsCita = noves.tagsCita;
   desarDades(noves);
   desarMeta(meta);
 
@@ -1199,10 +1286,11 @@ async function actualitzarDesDeGithub() {
   if (!localStorage.getItem(POMODORO_CONFIG_KEY) && dades.focus_config) {
     desarConfigPomodoro({ ...POMODORO_CONFIG_DEFECTE, ...dades.focus_config });
   }
-  // Aprofitem que hi ha connexió per intentar pujar pomodoros i previsions
-  // noves pendents.
+  // Aprofitem que hi ha connexió per intentar pujar pomodoros, previsions
+  // i cites noves pendents.
   enviarPomodorosPendents();
   enviarPrevisionsNovesPendents();
+  enviarCitesNovesPendents();
 
   aplicarNovesDades(rows, {
     sagues: Array.isArray(dades.sagues) ? dades.sagues : [],
@@ -1210,6 +1298,7 @@ async function actualitzarDesDeGithub() {
     reptes: dades.reptes || null,
     llibresEnCurs: Array.isArray(dades.llibres_en_curs) ? dades.llibres_en_curs : [],
     mesosTancats: Array.isArray(dades.mesos_tancats) ? dades.mesos_tancats : [],
+    tagsCita: Array.isArray(dades.tags_cita) ? dades.tags_cita : [],
   }, {
     font: 'github',
     data_importacio: new Date().toISOString(),
@@ -1251,6 +1340,7 @@ function render() {
   else if (state.tab === 'sagues') renderSagues();
   else if (state.tab === 'tbr') renderTbr();
   else if (state.tab === 'reptes') renderReptes();
+  else if (state.tab === 'cites') renderCites();
   else if (state.tab === 'pomodoro') renderPomodoro();
 }
 
@@ -1612,6 +1702,231 @@ function ajustarAlturaPomodoro() {
   vistaPomo.style.height = `${alt}px`;
 }
 
+// ── Cites ────────────────────────────────────────────────────────────────
+
+function renderCites() {
+  const main = document.getElementById('main');
+
+  if (!state.llibresEnCurs.length) {
+    main.innerHTML = `
+      <div class="buit">
+        <div class="icona">${icona('cita', 44)}</div>
+        <h2>Cap llibre "Llegint"</h2>
+        <p>Sincronitza amb GitHub (🔄) després d'actualitzar i tancar/sincronitzar
+        LEXAI a l'escriptori per veure els llibres en curs.</p>
+      </div>`;
+    return;
+  }
+
+  if (!state.citesLlibreId || !state.llibresEnCurs.some(l => l.id === state.citesLlibreId)) {
+    state.citesLlibreId = state.llibresEnCurs[0].id;
+    state.citesIdx = 0;
+  }
+  const llibre = state.llibresEnCurs.find(l => l.id === state.citesLlibreId);
+  const cites = llibre.cites || [];
+  if (state.citesIdx >= cites.length) state.citesIdx = 0;
+
+  const chipsLlibres = state.llibresEnCurs.map(l => `
+    <button type="button" class="tbr-filtre-btn${l.id === state.citesLlibreId ? ' actiu' : ''}"
+            data-cita-llibre="${l.id}">${escapeHtml(l.titol)}</button>`).join('');
+
+  let cosHtml;
+  if (!cites.length) {
+    cosHtml = `
+      <div class="buit" style="padding:40px 20px;">
+        <div class="icona">${icona('cita', 40)}</div>
+        <h2>Encara no hi ha cites</h2>
+        <p>Afegeix la primera cita d'aquest llibre.</p>
+      </div>`;
+  } else {
+    const c = cites[state.citesIdx];
+    const tipusLabel = (TIPUS_CITA.find(([k]) => k === (c.tipus_cita || 'anotacio')) || [null, 'Anotació'])[1];
+    const tagsHtml = (c.tags || []).map(t => `<span class="cita-tag">${escapeHtml(t)}</span>`).join('');
+    cosHtml = `
+      <div class="cita-card" id="cita-card">
+        <div class="cita-card-top">
+          <span class="cita-tipus-badge">${tipusLabel}</span>
+          ${c.pagina ? `<span class="cita-pagina">pàg. ${escapeHtml(String(c.pagina))}</span>` : ''}
+        </div>
+        <div class="cita-text">«${escapeHtml(c.text_cita || '')}»</div>
+        ${tagsHtml ? `<div class="cita-tags">${tagsHtml}</div>` : ''}
+      </div>
+      <div class="cita-contador">
+        ${state.citesIdx + 1} / ${cites.length}
+        ${cites.length > 1 ? `<div class="cita-hint">desliza o fes scroll sobre la targeta</div>` : ''}
+      </div>`;
+  }
+
+  main.innerHTML = `
+    <div class="tbr-filtres" style="margin-bottom:14px;">${chipsLlibres}</div>
+    ${cosHtml}
+    <button type="button" class="btn-primari" id="btn-cita-nova" style="width:100%; margin-top:16px;">+ Cita nova</button>`;
+
+  main.querySelectorAll('[data-cita-llibre]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.citesLlibreId = parseInt(btn.getAttribute('data-cita-llibre'), 10);
+      state.citesIdx = 0;
+      renderCites();
+    });
+  });
+  document.getElementById('btn-cita-nova').addEventListener('click', () => obrirFormNovaCita(state.citesLlibreId));
+
+  const cardEl = document.getElementById('cita-card');
+  if (cardEl && cites.length > 1) {
+    let wheelLock = false;
+    const canviar = (dir) => {
+      state.citesIdx = dir === 'next'
+        ? (state.citesIdx + 1) % cites.length
+        : (state.citesIdx - 1 + cites.length) % cites.length;
+      renderCites();
+    };
+    let startY = null;
+    cardEl.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; });
+    cardEl.addEventListener('touchend', (e) => {
+      if (startY === null) return;
+      const dy = startY - e.changedTouches[0].clientY;
+      if (Math.abs(dy) > 35) canviar(dy > 0 ? 'next' : 'prev');
+      startY = null;
+    });
+    cardEl.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (wheelLock) return;
+      wheelLock = true;
+      canviar(e.deltaY > 0 ? 'next' : 'prev');
+      setTimeout(() => { wheelLock = false; }, 350);
+    }, { passive: false });
+  }
+}
+
+function obrirFormNovaCita(llibreId) {
+  const llibre = state.llibresEnCurs.find(l => l.id === llibreId);
+  if (!llibre) return;
+  const tagsSeleccionats = new Set();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-caixa modal-nova-previsio-caixa">
+      <div class="modal-titol">Nova cita · ${escapeHtml(llibre.titol)}</div>
+
+      <div class="config-fila-text">
+        <label for="nc-text">Text de la cita *</label>
+        <textarea id="nc-text" rows="3" placeholder="Escriu o enganxa el fragment..."></textarea>
+      </div>
+      <div class="config-fila-text">
+        <label for="nc-pagina">Pàgina</label>
+        <input type="text" id="nc-pagina" value="${llibre.pagina_actual || ''}" placeholder="Pàgina">
+      </div>
+      <div class="config-fila-text">
+        <label for="nc-capitol">Capítol</label>
+        <input type="text" id="nc-capitol" placeholder="Capítol">
+      </div>
+      <div class="config-fila-text">
+        <label for="nc-tema">Tema (de què tracta)</label>
+        <input type="text" id="nc-tema" placeholder="p. ex. vigilància algorísmica">
+      </div>
+      <div class="config-fila-text">
+        <label for="nc-tipus">Tipus</label>
+        <select id="nc-tipus">${TIPUS_CITA.map(([v, l]) => `<option value="${v}"${v === 'anotacio' ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+      <div class="config-fila-text">
+        <label for="nc-impacte">Impacte</label>
+        <select id="nc-impacte">${IMPACTE_CITA.map(([v, l]) => `<option value="${v}"${v === 'standard' ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+
+      <div class="config-seccio">Tags</div>
+      <div class="tbr-filtres" id="nc-tags-chips"></div>
+      <div class="config-fila-text" style="margin-top:8px;">
+        <input type="text" id="nc-tag-nou" placeholder="Nom d'un tag nou i prem Enter">
+      </div>
+
+      <div class="config-fila-text">
+        <label for="nc-nota">Nota personal (opcional)</label>
+        <textarea id="nc-nota" rows="2" placeholder="..."></textarea>
+      </div>
+
+      <button type="button" id="nc-desar">Desar cita</button>
+      <button type="button" id="nc-cancelar">Cancel·lar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  function renderTagsChips() {
+    const cont = overlay.querySelector('#nc-tags-chips');
+    cont.innerHTML = state.tagsCita.map((t) => `
+      <button type="button" class="tbr-filtre-btn${tagsSeleccionats.has(t) ? ' actiu' : ''}"
+              data-tag="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('');
+    cont.querySelectorAll('[data-tag]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-tag');
+        if (tagsSeleccionats.has(t)) tagsSeleccionats.delete(t); else tagsSeleccionats.add(t);
+        renderTagsChips();
+      });
+    });
+  }
+  renderTagsChips();
+
+  overlay.querySelector('#nc-tag-nou').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const nom = e.target.value.trim();
+    if (!nom) return;
+    if (!state.tagsCita.includes(nom)) state.tagsCita.push(nom);
+    tagsSeleccionats.add(nom);
+    e.target.value = '';
+    renderTagsChips();
+  });
+
+  overlay.querySelector('#nc-cancelar').addEventListener('click', () => {
+    document.body.removeChild(overlay);
+  });
+
+  overlay.querySelector('#nc-desar').addEventListener('click', () => {
+    const inpText = overlay.querySelector('#nc-text');
+    const text = inpText.value.trim();
+    if (!text) {
+      inpText.style.borderColor = 'var(--red)';
+      inpText.focus();
+      return;
+    }
+    const clientId = `mob-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const tags = Array.from(tagsSeleccionats);
+    const nova = {
+      client_id: clientId,
+      llibre_id: llibreId,
+      text_cita: text,
+      pagina: overlay.querySelector('#nc-pagina').value.trim() || null,
+      capitol: overlay.querySelector('#nc-capitol').value.trim() || null,
+      tema: overlay.querySelector('#nc-tema').value.trim() || null,
+      tipus_cita: overlay.querySelector('#nc-tipus').value,
+      impacte: overlay.querySelector('#nc-impacte').value,
+      tags,
+      nota_personal: overlay.querySelector('#nc-nota').value.trim() || null,
+      creat_el: new Date().toISOString(),
+    };
+
+    // Actualització optimista: la cita apareix a l'instant a "Veure cites",
+    // amb la mateixa forma que arribaria via GitHub des de l'escriptori.
+    if (!llibre.cites) llibre.cites = [];
+    llibre.cites.unshift({
+      id: clientId, text_cita: nova.text_cita, pagina: nova.pagina, capitol: nova.capitol,
+      tema: nova.tema, tipus_cita: nova.tipus_cita, impacte: nova.impacte,
+      tags: nova.tags, nota_personal: nova.nota_personal, data_alta: nova.creat_el.slice(0, 10),
+    });
+    state.citesIdx = 0;
+    desarDades({
+      previsions: state.previsions, sagues: state.sagues, tbr: state.tbr,
+      reptes: state.reptes, llibresEnCurs: state.llibresEnCurs,
+      mesosTancats: state.mesosTancats, tagsCita: state.tagsCita,
+    });
+
+    afegirCitaNovaPendent(nova);
+    enviarCitesNovesPendents(); // best-effort, no bloqueja
+
+    document.body.removeChild(overlay);
+    mostrarToast("✓ Cita afegida (es sincronitzarà amb l'escriptori).");
+    if (state.tab === 'cites') renderCites();
+  });
+}
+
 function renderPomodoro() {
   const main = document.getElementById('main');
   const nav = document.getElementById('mes-nav');
@@ -1852,6 +2167,7 @@ function injectarIconesFixes() {
   document.getElementById('nav-sagues').innerHTML = icona('llibre', 20) + '<span>Sagues</span>';
   document.getElementById('nav-tbr').innerHTML = icona('piles', 20) + '<span>TBR</span>';
   document.getElementById('nav-reptes').innerHTML = icona('diana', 20) + '<span>Reptes</span>';
+  document.getElementById('nav-cites').innerHTML = icona('cita', 20) + '<span>Cites</span>';
   document.getElementById('nav-pomodoro').innerHTML = icona('rellotge', 20) + '<span>Pomodoro</span>';
 
   document.getElementById('opcio-github').addEventListener('click', (ev) => {
@@ -1956,6 +2272,7 @@ function init() {
   state.reptes = dades.reptes;
   state.llibresEnCurs = dades.llibresEnCurs || [];
   state.mesosTancats = dades.mesosTancats || [];
+  state.tagsCita = dades.tagsCita || [];
   state.mesos = mesosDisponibles(state.previsions);
   const mesActual = new Date().toISOString().slice(0, 7);
   const idxActual = state.mesos.indexOf(mesActual);
@@ -1998,13 +2315,19 @@ function init() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       enviarPomodorosPendents();
+      enviarPrevisionsNovesPendents();
+      enviarCitesNovesPendents();
     } else if (pomo.enCurs && !pomo.pausat) {
       // El navegador allibera el Wake Lock sol quan la pantalla es bloqueja;
       // cal tornar-lo a demanar en tornar a l'app si el focus segueix actiu.
       _activarWakeLock();
     }
   });
-  window.addEventListener('pagehide', () => { enviarPomodorosPendents(); });
+  window.addEventListener('pagehide', () => {
+    enviarPomodorosPendents();
+    enviarPrevisionsNovesPendents();
+    enviarCitesNovesPendents();
+  });
 
   window.addEventListener('resize', () => {
     if (state.tab === 'pomodoro') ajustarAlturaPomodoro();
