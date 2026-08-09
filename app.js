@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.7.5';
+const APP_VERSION = '1.7.6';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
