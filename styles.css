@@ -450,7 +450,11 @@ main { flex: 1; padding: 14px 12px 80px; }
 .config-fila-text label { margin-bottom: 3px; }
 .config-fila-text input {
   width: 100%; text-align: left; font-weight: 500; box-sizing: border-box;
+  background: var(--bg-hover); border: 1px solid var(--border-lt); border-radius: 8px;
+  color: var(--text-hi); font-size: 14px;
+  padding: 7px 8px;
 }
+.config-fila-text input:focus { border-color: var(--orange); outline: none; }
 .config-check-fila {
   display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
 }
@@ -831,26 +835,35 @@ main { flex: 1; padding: 14px 12px 80px; }
   font-size: 10.5px; color: var(--text-lo); font-weight: 400; margin-top: 2px;
 }
 
-/* Camp "Pàgina" del formulari de cita — input + botó "+" rodó (mateix
-   llenguatge visual que pomo-llibre-pag-fila, però a ample complet). */
-.cita-pag-fila {
+/* Camp "Pàgina" i "Capítol" del formulari de cita — input estret + botó "+"
+   rodó (mateix llenguatge visual que pomo-llibre-pag-fila). */
+.cita-pag-fila, .cita-capitol-fila {
   display: flex; align-items: center; gap: 8px;
 }
-.cita-pag-fila input {
-  flex: 1;
+.cita-pag-fila input, .cita-capitol-fila input {
+  width: 4ch;      /* pàgina: màx. ~4 dígits */
+  flex: 0 0 auto;
+  height: 30px;
+  box-sizing: border-box;
   background: var(--bg-hover); border: 1px solid var(--border-lt); border-radius: 8px;
   color: var(--text-hi); font-size: 14px; font-weight: 500;
-  padding: 7px 8px;
+  padding: 0 8px;
+  text-align: center;
 }
-.cita-pag-fila input:focus { border-color: var(--orange); outline: none; }
-.cita-pag-fila button {
+.cita-capitol-fila input { width: 3ch; }  /* capítol: màx. ~3 dígits */
+.cita-pag-fila input:focus, .cita-capitol-fila input:focus {
+  border-color: var(--orange); outline: none;
+}
+.cita-pag-fila button, .cita-capitol-fila button {
   width: 30px; height: 30px; border-radius: 50%; padding: 0; flex-shrink: 0;
   background: var(--bg-hover); border: 1px solid var(--orange);
   color: var(--orange); font-size: 15px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; line-height: 1;
   cursor: pointer;
 }
-.cita-pag-fila button:active { background: var(--orange); color: #1A1200; }
+.cita-pag-fila button:active, .cita-capitol-fila button:active {
+  background: var(--orange); color: #1A1200;
+}
 
 /* Chips de Tipus/Impacte de cita: més compactes que un .tbr-filtre-btn
    normal (menys padding, lletra més petita) perquè hi càpiguen més per
@@ -859,3 +872,15 @@ main { flex: 1; padding: 14px 12px 80px; }
   padding: 5px 10px;
   font-size: 11.5px;
 }
+
+/* Input per crear un tag nou: pill compacta encaixada a la mateixa fila
+   dels chips de tags, no un camp a ample complet a part. */
+#nc-tags-chips { align-items: center; }
+.cita-tag-nou-input {
+  width: 96px; flex: 0 0 auto;
+  background: transparent; border: 1px dashed var(--border-lt); border-radius: 20px;
+  color: var(--text-hi); font-size: 12px;
+  padding: 5px 12px;
+}
+.cita-tag-nou-input::placeholder { color: var(--text-lo); }
+.cita-tag-nou-input:focus { border-color: var(--orange); border-style: solid; outline: none; }

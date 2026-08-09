@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.7.7';
+const APP_VERSION = '1.7.8';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -1823,7 +1823,10 @@ function obrirFormNovaCita(llibreId) {
       </div>
       <div class="config-fila-text">
         <label for="nc-capitol">Capítol</label>
-        <input type="number" id="nc-capitol" min="0" placeholder="—">
+        <div class="cita-capitol-fila">
+          <input type="number" id="nc-capitol" min="0" placeholder="—">
+          <button type="button" id="nc-capitol-mes" aria-label="Sumar un capítol">+</button>
+        </div>
       </div>
       <div class="config-fila-text">
         <label for="nc-tema">Tema (de què tracta)</label>
@@ -1837,9 +1840,6 @@ function obrirFormNovaCita(llibreId) {
 
       <div class="config-seccio">Tags</div>
       <div class="tbr-filtres" id="nc-tags-chips"></div>
-      <div class="config-fila-text" style="margin-top:8px;">
-        <input type="text" id="nc-tag-nou" placeholder="Nom d'un tag nou i prem Enter">
-      </div>
 
       <div class="config-fila-text">
         <label for="nc-nota">Nota personal (opcional)</label>
@@ -1886,9 +1886,11 @@ function obrirFormNovaCita(llibreId) {
 
   function renderTagsChips() {
     const cont = overlay.querySelector('#nc-tags-chips');
-    cont.innerHTML = state.tagsCita.map((t) => `
+    const chipsHtml = state.tagsCita.map((t) => `
       <button type="button" class="tbr-filtre-btn${tagsSeleccionats.has(t) ? ' actiu' : ''}"
               data-tag="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('');
+    cont.innerHTML = chipsHtml
+      + `<input type="text" class="cita-tag-nou-input" id="nc-tag-nou" placeholder="+ tag nou">`;
     cont.querySelectorAll('[data-tag]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const t = btn.getAttribute('data-tag');
@@ -1896,18 +1898,21 @@ function obrirFormNovaCita(llibreId) {
         renderTagsChips();
       });
     });
+    cont.querySelector('#nc-tag-nou').addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const nom = e.target.value.trim();
+      if (!nom) return;
+      if (!state.tagsCita.includes(nom)) state.tagsCita.push(nom);
+      tagsSeleccionats.add(nom);
+      renderTagsChips();
+    });
   }
   renderTagsChips();
 
-  overlay.querySelector('#nc-tag-nou').addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const nom = e.target.value.trim();
-    if (!nom) return;
-    if (!state.tagsCita.includes(nom)) state.tagsCita.push(nom);
-    tagsSeleccionats.add(nom);
-    e.target.value = '';
-    renderTagsChips();
+  overlay.querySelector('#nc-capitol-mes').addEventListener('click', () => {
+    const inp = overlay.querySelector('#nc-capitol');
+    inp.value = (parseInt(inp.value, 10) || 0) + 1;
   });
 
   overlay.querySelector('#nc-cancelar').addEventListener('click', () => {
