@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.7.6';
+const APP_VERSION = '1.7.7';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -1816,21 +1816,24 @@ function obrirFormNovaCita(llibreId) {
       </div>
       <div class="config-fila-text">
         <label for="nc-pagina">Pàgina</label>
-        <input type="text" id="nc-pagina" value="${llibre.pagina_actual || ''}" placeholder="Pàgina">
+        <div class="cita-pag-fila">
+          <input type="number" id="nc-pagina" min="0" value="${llibre.pagina_actual || ''}" placeholder="—">
+          <button type="button" id="nc-pagina-mes" aria-label="Sumar una pàgina">+</button>
+        </div>
       </div>
       <div class="config-fila-text">
         <label for="nc-capitol">Capítol</label>
-        <input type="text" id="nc-capitol" placeholder="Capítol">
+        <input type="number" id="nc-capitol" min="0" placeholder="—">
       </div>
       <div class="config-fila-text">
         <label for="nc-tema">Tema (de què tracta)</label>
         <input type="text" id="nc-tema" placeholder="p. ex. vigilància algorísmica">
       </div>
       <div class="config-seccio" style="margin-top:6px;">Tipus</div>
-      <div class="tbr-filtres" id="nc-tipus-chips"></div>
+      <div class="tbr-filtres cita-chips-petits" id="nc-tipus-chips"></div>
 
       <div class="config-seccio">Impacte</div>
-      <div class="tbr-filtres" id="nc-impacte-chips"></div>
+      <div class="tbr-filtres cita-chips-petits" id="nc-impacte-chips"></div>
 
       <div class="config-seccio">Tags</div>
       <div class="tbr-filtres" id="nc-tags-chips"></div>
@@ -1875,6 +1878,11 @@ function obrirFormNovaCita(llibreId) {
     });
   }
   renderImpacteChips();
+
+  overlay.querySelector('#nc-pagina-mes').addEventListener('click', () => {
+    const inp = overlay.querySelector('#nc-pagina');
+    inp.value = (parseInt(inp.value, 10) || 0) + 1;
+  });
 
   function renderTagsChips() {
     const cont = overlay.querySelector('#nc-tags-chips');
