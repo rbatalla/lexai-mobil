@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.7.8';
+const APP_VERSION = '1.8.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -31,6 +31,7 @@ const ICONES = {
   pausa: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
   stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
   cita: '<path d="M3 20l1.3 -3.9a9 8 0 1 1 3.4 2.9l-4.7 1"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/>',
+  ampliar: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M12 1v3"/><path d="M9 1h6"/>',
 };
 
 function icona(nom, mida) {
@@ -166,6 +167,7 @@ let pomo = {
   llibreTitol: null,
   paginaInicial: null,
   paginesLlegidesSessio: 0,     // acumulat d'aquesta visita, per ajustar la projecció sense esperar sincronitzar
+  nAmpliacions: 0,              // cops ampliat en AQUEST pomodoro (25 min més cada cop)
 };
 
 // ── Persistència ──────────────────────────────────────────────────────────
@@ -797,6 +799,7 @@ function pomoIniciarConfirmat() {
     pomo.total = pomo.tipus === 'treball' ? cfg.durada_treball
                : (pomo.cicleNum === 0 ? cfg.durada_desc_llarg : cfg.durada_descans);
     pomo.restant = pomo.total;
+    pomo.nAmpliacions = 0;
     const ara = new Date();
     pomo.horaInici = ara.toTimeString().slice(0, 8);
     pomo.dataInici = ara.toISOString().slice(0, 10);
@@ -870,20 +873,58 @@ function pomoTick() {
   pomo.restant--;
   if (pomo.restant <= 0) {
     clearInterval(pomo.interval);
-    pomoAcabar();
+    if (pomo.tipus === 'treball') {
+      pomoCheckpointFinalOAmpliar();
+    } else {
+      pomoAcabar();
+    }
     return;
   }
   renderPomodoro();
 }
 
-function pomoAcabar() {
-  // El so ha de sonar AQUÍ, en el mateix instant que s'acaben els minuts --
-  // no quan es confirma la pàgina final (que pot ser molt més tard si es
-  // triga a mirar el mòbil).
+function pomoAmpliar() {
+  // Disponible en qualsevol moment mentre corre un TREBALL, no només en
+  // arribar a 0 -- allarga el pomodoro 25 min més (un sol registre, no
+  // dos). Si el checkpoint ja l'havia aturat en arribar a 0, el torna a
+  // engegar (clearInterval() no buida pomo.interval, per això es torna a
+  // cridar sempre -- és idempotent, no fa mal si ja estava en marxa).
+  if (!(pomo.enCurs && pomo.tipus === 'treball')) return;
   const cfg = obtenirConfigPomodoro();
-  if (pomo.tipus === 'treball') {
-    if (cfg.so_activat) reproduirBeep(cfg.so_durada);
-  } else {
+  pomo.total += cfg.durada_treball;
+  pomo.restant += cfg.durada_treball;
+  pomo.nAmpliacions = (pomo.nAmpliacions || 0) + 1;
+  clearInterval(pomo.interval);
+  if (!pomo.pausat) {
+    pomo.interval = setInterval(pomoTick, 1000);
+  }
+  renderPomodoro();
+}
+
+function pomoCheckpointFinalOAmpliar() {
+  // Arribats als 25 min (originals o d'una ampliació anterior): NO es
+  // continua en silenci -- es pregunta explícitament si es vol finalitzar
+  // o ampliar 25 min més. Es repeteix cada 25 min mentre es vagi ampliant,
+  // per no deixar el mòbil comptant sol sense supervisió si s'oblida obert.
+  const cfg = obtenirConfigPomodoro();
+  if (cfg.so_activat) reproduirBeep(cfg.so_durada);
+  const minutsFets = Math.round(pomo.total / 60);
+  mostrarConfirmacio(
+    'Pomodoro complet ✓',
+    `Han passat ${minutsFets} min. Vols ampliar 25 min més o finalitzar?`,
+    '+ Ampliar 25 min', 'Finalitzar',
+    () => pomoAmpliar(),   // "Sí" -> ampliar i tornar a engegar el compte enrere
+    () => pomoAcabar()     // "No" (Finalitzar) -> flux normal de tancament
+  );
+}
+
+function pomoAcabar() {
+  // El so de TREBALL ja sona a pomoCheckpointFinalOAmpliar(), just quan
+  // arriben els 25 min -- no repetir-lo aquí (que pot arribar molt més
+  // tard, si es triga a triar "Finalitzar" al diàleg). El de DESCANS no
+  // passa per cap checkpoint, així que aquí sí que li toca sonar.
+  const cfg = obtenirConfigPomodoro();
+  if (pomo.tipus === 'descans') {
     if (cfg.so_descans) reproduirBeep(cfg.so_durada);
   }
   if (pomo.tipus === 'treball' && pomo.llibreId) {
@@ -893,7 +934,7 @@ function pomoAcabar() {
   pomoAcabarContinuar(null);
 }
 
-function mostrarConfirmacio(titol, missatge, textSi, textNo, onConfirmar) {
+function mostrarConfirmacio(titol, missatge, textSi, textNo, onConfirmar, onCancelar) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -908,6 +949,7 @@ function mostrarConfirmacio(titol, missatge, textSi, textNo, onConfirmar) {
   document.body.appendChild(overlay);
   overlay.querySelector('#conf-no').addEventListener('click', () => {
     document.body.removeChild(overlay);
+    if (onCancelar) onCancelar();
   });
   overlay.querySelector('#conf-si').addEventListener('click', () => {
     document.body.removeChild(overlay);
@@ -1104,6 +1146,13 @@ function pomoAcabarContinuar(paginaFinal) {
 }
 
 function registrarSessioPomodoro(estat, durada_real, paginaFinal = null, llibreAcabat = false) {
+  // Si aquest pomodoro s'ha ampliat almenys un cop, l'estat final és
+  // SEMPRE 'ampliat' -- independentment de si s'ha aturat abans d'acabar
+  // el bloc extra, s'ha finalitzat manualment, o ha arribat a 0 una altra
+  // vegada -- en lloc del 'complet'/'parcial' que li tocaria per defecte.
+  // (Un descans mai s'amplia, per això es comprova tipus==='treball'.)
+  const estatFinal = (pomo.tipus === 'treball' && (pomo.nAmpliacions || 0) > 0)
+    ? 'ampliat' : estat;
   const ara = new Date();
   const sessio = {
     tipus: pomo.tipus,
@@ -1112,7 +1161,7 @@ function registrarSessioPomodoro(estat, durada_real, paginaFinal = null, llibreA
     hora_fi: ara.toTimeString().slice(0, 8),
     durada_prevista: pomo.total,
     durada_real: Math.max(0, durada_real),
-    estat,
+    estat: estatFinal,
   };
   if (pomo.tipus === 'treball' && pomo.llibreId) {
     sessio.llibre_id = pomo.llibreId;
@@ -1815,17 +1864,21 @@ function obrirFormNovaCita(llibreId) {
         <textarea id="nc-text" rows="3" placeholder="Escriu o enganxa el fragment..."></textarea>
       </div>
       <div class="config-fila-text">
-        <label for="nc-pagina">Pàgina</label>
-        <div class="cita-pag-fila">
-          <input type="number" id="nc-pagina" min="0" value="${llibre.pagina_actual || ''}" placeholder="—">
-          <button type="button" id="nc-pagina-mes" aria-label="Sumar una pàgina">+</button>
-        </div>
-      </div>
-      <div class="config-fila-text">
-        <label for="nc-capitol">Capítol</label>
-        <div class="cita-capitol-fila">
-          <input type="number" id="nc-capitol" min="0" placeholder="—">
-          <button type="button" id="nc-capitol-mes" aria-label="Sumar un capítol">+</button>
+        <div class="cita-pag-cap-fila">
+          <div class="cita-num-grup">
+            <label for="nc-pagina">Pàgina</label>
+            <div class="cita-num-input">
+              <input type="number" id="nc-pagina" min="0" value="${llibre.pagina_actual || ''}" placeholder="—">
+              <button type="button" id="nc-pagina-mes" aria-label="Sumar una pàgina">+</button>
+            </div>
+          </div>
+          <div class="cita-num-grup">
+            <label for="nc-capitol">Capítol</label>
+            <div class="cita-num-input cita-num-input-cap">
+              <input type="number" id="nc-capitol" min="0" placeholder="—">
+              <button type="button" id="nc-capitol-mes" aria-label="Sumar un capítol">+</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="config-fila-text">
@@ -2012,6 +2065,10 @@ function renderPomodoro() {
                     title="${pomo.enCurs
                       ? (pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar')
                       : 'Treure la selecció del llibre'}">${icona('stop', 15)}</button>
+            ${(pomo.tipus === 'treball' && pomo.enCurs) ? `
+              <button class="pomo-btn-mitja pomo-btn-ampliar" id="pomo-ampliar"
+                      title="Ampliar aquest pomodoro 25 min més (un sol registre)">${icona('ampliar', 15)}</button>
+            ` : ''}
             ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
               <button class="pomo-btn-mitja pomo-btn-finalitzar" id="pomo-finalitzar"
                       title="Finalitzar aquest pomodoro ara (parcial)">${icona('bandera', 14)}</button>
@@ -2150,6 +2207,8 @@ function renderPomodoro() {
   if (bStop) bStop.addEventListener('click', pomoAturar);
   const bFinalitzar = document.getElementById('pomo-finalitzar');
   if (bFinalitzar) bFinalitzar.addEventListener('click', pomoObrirFinalitzarAnticipat);
+  const bAmpliar = document.getElementById('pomo-ampliar');
+  if (bAmpliar) bAmpliar.addEventListener('click', pomoAmpliar);
   const bContinuar = document.getElementById('pomo-continuar');
   if (bContinuar) bContinuar.addEventListener('click',
     pomo.tipus === 'treball' ? pomoContinuarDescans : pomoContinuarTreball);

@@ -663,6 +663,8 @@ main { flex: 1; padding: 14px 12px 80px; }
 .pomo-controls-fila-baixa { display: flex; align-items: center; gap: 8px; }
 .pomo-btn-finalitzar { border-color: var(--orange); color: var(--orange); }
 .pomo-btn-finalitzar:active { background: var(--orange); color: #1A1200; }
+.pomo-btn-ampliar { border-color: var(--border-lt); color: var(--text-mid); }
+.pomo-btn-ampliar:active { background: var(--bg-hover); border-color: var(--orange); color: var(--orange); }
 
 .pomo-missatge { color: var(--green); margin-bottom: 8px; }
 .pomo-titol-fase { font-size: 18px; font-weight: 800; margin-bottom: 20px; }
@@ -835,35 +837,43 @@ main { flex: 1; padding: 14px 12px 80px; }
   font-size: 10.5px; color: var(--text-lo); font-weight: 400; margin-top: 2px;
 }
 
-/* Camp "Pàgina" i "Capítol" del formulari de cita — input estret + botó "+"
-   rodó (mateix llenguatge visual que pomo-llibre-pag-fila). */
-.cita-pag-fila, .cita-capitol-fila {
-  display: flex; align-items: center; gap: 8px;
+/* Fila "Pàgina" + "Capítol" del formulari de cita, un al costat de l'altre.
+   El bug de "només es veuen 2 dígits" i el botó "+" desalineat venia del
+   spinner natiu de type="number" (les fletxes amunt/avall del navegador),
+   que es menjava espai i alçada -- es treu explícitament amb appearance:none. */
+.cita-pag-cap-fila { display: flex; gap: 18px; }
+.cita-num-grup { display: flex; flex-direction: column; }
+.cita-num-grup label {
+  font-size: 12px; color: var(--text-mid); margin-bottom: 4px; font-weight: 500;
 }
-.cita-pag-fila input, .cita-capitol-fila input {
-  width: 4ch;      /* pàgina: màx. ~4 dígits */
-  flex: 0 0 auto;
+.cita-num-input { display: flex; align-items: center; gap: 8px; }
+.cita-num-input input {
+  width: 54px;   /* pàgina: 4 dígits ben visibles */
   height: 30px;
   box-sizing: border-box;
   background: var(--bg-hover); border: 1px solid var(--border-lt); border-radius: 8px;
-  color: var(--text-hi); font-size: 14px; font-weight: 500;
-  padding: 0 8px;
+  color: var(--text-hi); font-size: 14px; font-weight: 500; font-family: inherit;
+  padding: 0 6px;
   text-align: center;
+  -moz-appearance: textfield;
+  appearance: none; -webkit-appearance: none;
 }
-.cita-capitol-fila input { width: 3ch; }  /* capítol: màx. ~3 dígits */
-.cita-pag-fila input:focus, .cita-capitol-fila input:focus {
-  border-color: var(--orange); outline: none;
+.cita-num-input input::-webkit-outer-spin-button,
+.cita-num-input input::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
 }
-.cita-pag-fila button, .cita-capitol-fila button {
+.cita-num-input-cap input { width: 42px; }  /* capítol: 3 dígits */
+.cita-num-input input:focus { border-color: var(--orange); outline: none; }
+.cita-num-input button {
   width: 30px; height: 30px; border-radius: 50%; padding: 0; flex-shrink: 0;
+  box-sizing: border-box;
   background: var(--bg-hover); border: 1px solid var(--orange);
-  color: var(--orange); font-size: 15px; font-weight: 700;
+  color: var(--orange); font-size: 15px; font-weight: 700; font-family: inherit;
   display: flex; align-items: center; justify-content: center; line-height: 1;
+  appearance: none; -webkit-appearance: none;
   cursor: pointer;
 }
-.cita-pag-fila button:active, .cita-capitol-fila button:active {
-  background: var(--orange); color: #1A1200;
-}
+.cita-num-input button:active { background: var(--orange); color: #1A1200; }
 
 /* Chips de Tipus/Impacte de cita: més compactes que un .tbr-filtre-btn
    normal (menys padding, lletra més petita) perquè hi càpiguen més per
