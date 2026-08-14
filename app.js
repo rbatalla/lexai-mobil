@@ -166,7 +166,6 @@ let pomo = {
   llibreId: null,              // llibre triat (opcional)
   llibreTitol: null,
   paginaInicial: null,
-  paginesLlegidesSessio: 0,     // acumulat d'aquesta visita, per ajustar la projecció sense esperar sincronitzar
   nAmpliacions: 0,              // cops ampliat en AQUEST pomodoro (25 min més cada cop)
 };
 
@@ -825,7 +824,6 @@ function pomoTriarLlibre(id) {
     // editable abans d'iniciar (potser has avançat sense fer focus).
     pomo.paginaInicial = llibre.pagina_actual || 0;
   }
-  pomo.paginesLlegidesSessio = 0; // reiniciar l'ajust local en canviar de llibre
   renderPomodoro();
 }
 
@@ -1047,6 +1045,34 @@ function mostrarModalPaginaFinal(anticipat = false) {
   }
 }
 
+// Únic càlcul de "pomodoros pendents" per a un llibre, compartit entre el
+// missatge de projecció (caixa de dalt del pomodoro) i el badge de la
+// targeta -- abans es calculaven per separat i divergien (un usava la
+// pàgina real ja actualitzada + un acumulat de la sessió que la tornava a
+// sumar per damunt, doblant l'efecte del pomodoro que s'acabava de fer).
+//
+// "Ajust": només es marca com a tal si el nou valor NO coincideix amb el
+// descompte simple de -1 (el que és obvi: si en quedaven 4 i n'has fet 1,
+// en queden 3). Si el ritme real d'aquest pomodoro confirma exactament
+// aquest -1, no hi ha res a "ajustar" -- es tracta com un descompte normal,
+// sense avís. Només s'avisa quan la reestimació dona un valor diferent
+// (ha llegit més o menys pàgines que la mitjana coneguda).
+function _actualitzarPomodorosRestants(llibreActualitzat, paginaFinal) {
+  const valorAnterior = llibreActualitzat.pomodoros_restants;
+  let nouValor = null;
+  if (llibreActualitzat.pag_per_pomodoro && llibreActualitzat.pagines) {
+    const pagRestants = Math.max(0, llibreActualitzat.pagines - paginaFinal);
+    nouValor = Math.ceil(pagRestants / llibreActualitzat.pag_per_pomodoro);
+  } else if (typeof valorAnterior === 'number') {
+    // Sense ritme propi conegut encara: descompte simple, mai és "ajust".
+    nouValor = Math.max(0, valorAnterior - 1);
+  }
+  if (nouValor === null) return;
+  const esperat = typeof valorAnterior === 'number' ? Math.max(0, valorAnterior - 1) : null;
+  llibreActualitzat.pomodorosAjustat = (esperat !== null) && (nouValor !== esperat);
+  llibreActualitzat.pomodoros_restants = nouValor;
+}
+
 function pomoFinalitzarAnticipatConfirmar(paginaFinal, llibreAcabat) {
   // Finalitza el pomodoro ARA MATEIX (no ha arribat a 0): es guarda com a
   // 'parcial' (incomplet, no ha durat el temps previst) però -- a diferència
@@ -1075,10 +1101,7 @@ function pomoFinalitzarAnticipatConfirmar(paginaFinal, llibreAcabat) {
       if (!llibreActualitzat.pag_per_pomodoro && llegides > 0) {
         llibreActualitzat.pag_per_pomodoro = llegides;
       }
-      if (llibreActualitzat.pag_per_pomodoro && llibreActualitzat.pagines) {
-        const pagRestants = Math.max(0, llibreActualitzat.pagines - paginaFinal);
-        llibreActualitzat.pomodoros_restants = Math.ceil(pagRestants / llibreActualitzat.pag_per_pomodoro);
-      }
+      _actualitzarPomodorosRestants(llibreActualitzat, paginaFinal);
     }
     desarEstatLlibresEnCurs();
   }
@@ -1102,10 +1125,7 @@ function pomoAcabarContinuar(paginaFinal) {
     pomo.cicleNum = (pomo.cicleNum + 1) % 4;
     incrementarComptadorAvui();
     if (pomo.llibreId && paginaFinal !== null) {
-      // Reduir la projecció EN LOCAL sense esperar la propera sincronització
-      // (l'escriptori la reajustarà amb el ritme real un cop importi la sessió).
       const llegides = paginaFinal - (pomo.paginaInicial || 0);
-      if (llegides > 0) pomo.paginesLlegidesSessio = (pomo.paginesLlegidesSessio || 0) + llegides;
       pomo.paginaInicial = paginaFinal; // el proper pomodoro comença on hem deixat
       // També a l'estat general del llibre -- si no, la resta de la UI
       // (targetes, selecció d'un altre llibre i tornar) seguia mostrant
@@ -1121,17 +1141,7 @@ function pomoAcabarContinuar(paginaFinal) {
         if (!llibreActualitzat.pag_per_pomodoro && llegides > 0) {
           llibreActualitzat.pag_per_pomodoro = llegides;
         }
-        // Recalculem amb la MATEIXA fórmula que la projecció de la caixa de
-        // dalt (pàgines restants / pàg per pomodoro), en lloc de restar-hi 1
-        // a cegues -- si aquell pomodoro concret ha llegit més o menys
-        // pàgines que la mitjana, un simple "-1" es desalineava del número
-        // que mostra la caixa de dalt.
-        if (llibreActualitzat.pag_per_pomodoro && llibreActualitzat.pagines) {
-          const pagRestants = Math.max(0, llibreActualitzat.pagines - paginaFinal);
-          llibreActualitzat.pomodoros_restants = Math.ceil(pagRestants / llibreActualitzat.pag_per_pomodoro);
-        } else if (typeof llibreActualitzat.pomodoros_restants === 'number') {
-          llibreActualitzat.pomodoros_restants = Math.max(0, llibreActualitzat.pomodoros_restants - 1);
-        }
+        _actualitzarPomodorosRestants(llibreActualitzat, paginaFinal);
         llibreActualitzat.darrer_focus = new Date().toISOString().slice(0, 10);
         // Persistir a localStorage -- si només toquem state en memòria, es
         // perd en recarregar l'app (per això mostrava una pàgina vella).
@@ -2085,13 +2095,12 @@ function renderPomodoro() {
     : (llibreSeleccionat ? (llibreSeleccionat.pagina_actual || 0) : 0);
 
   let projeccioHtml = '';
-  if (llibreSeleccionat && llibreSeleccionat.pag_per_pomodoro && llibreSeleccionat.pagines) {
-    const paginaEfectiva = (llibreSeleccionat.pagina_actual || 0) + (pomo.paginesLlegidesSessio || 0);
-    const pagRestants = Math.max(0, llibreSeleccionat.pagines - paginaEfectiva);
-    const projeccioAjustada = Math.ceil(pagRestants / llibreSeleccionat.pag_per_pomodoro);
-    const ajustat = pomo.paginesLlegidesSessio > 0;
+  if (llibreSeleccionat && typeof llibreSeleccionat.pomodoros_restants === 'number') {
+    // Mateix valor exacte que el badge de la targeta (_actualitzarPomodorosRestants
+    // és l'única font de veritat) -- ja no es recalcula aquí per separat.
+    const ajustat = !!llibreSeleccionat.pomodorosAjustat;
     projeccioHtml = `<div class="pomo-projeccio${ajustat ? ' ajustat' : ''}">
-        ~${projeccioAjustada} pomodoros per acabar${ajustat ? ' (ajustat ara mateix)' : ''}
+        ~${llibreSeleccionat.pomodoros_restants} pomodoros per acabar${ajustat ? ' (ajustat)' : ''}
       </div>`;
   }
 
