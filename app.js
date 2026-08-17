@@ -964,7 +964,20 @@ function mostrarModalPaginaFinal(anticipat = false) {
   const llibre = state.llibresEnCurs.find(l => l.id === pomo.llibreId);
   const inicial = pomo.paginaInicial || 0;
   const ritme = (llibre && llibre.pag_per_pomodoro) ? Math.round(llibre.pag_per_pomodoro) : null;
-  let valor = ritme ? inicial + ritme : inicial;
+  // Estimació proporcional al temps REAL transcorregut en aquest pomodoro
+  // (pomo.total - pomo.restant), no al d'un pomodoro estàndard sencer.
+  // Cobreix els dos casos amb la mateixa fórmula:
+  //  - Parcial (finalitzat abans d'hora): temps < durada_treball -> fracció < 1,
+  //    suggereix menys pàgines que un pomodoro complet.
+  //  - Ampliat (25 min addicionals un o més cops): temps > durada_treball ->
+  //    fracció > 1, suggereix més pàgines proporcionalment als minuts extra.
+  //  - Pomodoro estàndard sencer sense ampliar: fracció = 1, mateix
+  //    comportament que abans (inicial + ritme).
+  const cfg = obtenirConfigPomodoro();
+  const segonsTranscorreguts = Math.max(0, (pomo.total || 0) - (pomo.restant || 0));
+  const fraccioTemps = cfg.durada_treball > 0
+    ? segonsTranscorreguts / cfg.durada_treball : 1;
+  let valor = ritme ? inicial + Math.round(ritme * fraccioTemps) : inicial;
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -1001,8 +1014,9 @@ function mostrarModalPaginaFinal(anticipat = false) {
   function actualitzarPct() {
     if (ritme) {
       const fetes = valor - inicial;
-      const pct = Math.max(0, Math.round((fetes / ritme) * 100));
-      lblPct.textContent = `${pct}% del pomodoro esperat (~${ritme} pàg.)`;
+      const esperades = Math.max(1, Math.round(ritme * fraccioTemps));
+      const pct = Math.max(0, Math.round((fetes / esperades) * 100));
+      lblPct.textContent = `${pct}% del ritme esperat (~${esperades} pàg. en aquest temps)`;
     } else {
       lblPct.textContent = '';
     }
