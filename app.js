@@ -1637,6 +1637,14 @@ function renderSagues() {
   });
 }
 
+const ESTAT_COMPRA_LABELS = {
+  comprat:            { txt: 'Comprat',       classe: 'comprat' },
+  pendent:            { txt: 'Pendent',       classe: 'pendent' },
+  transit:            { txt: 'En trànsit',    classe: 'transit' },
+  cancellat:          { txt: 'Cancel·lat',    classe: 'cancellat' },
+  sense_planificar:   { txt: 'Sense planificar', classe: 'sense-planificar' },
+};
+
 function renderCardSaga(s) {
   const total = s.total_previst;
   const pct = total ? Math.min(100, Math.round((s.llegits / total) * 100)) : 0;
@@ -1648,11 +1656,15 @@ function renderCardSaga(s) {
   const volums = s.volums || [];
   const volumsHtml = expandida ? `
     <div class="saga-volums">
-      ${volums.length ? volums.map(v => `
+      ${volums.length ? volums.map(v => {
+        const ec = ESTAT_COMPRA_LABELS[v.estat_compra] || ESTAT_COMPRA_LABELS.sense_planificar;
+        return `
         <div class="saga-volum-fila${v.llegit ? ' llegit' : ''}">
           <span class="saga-volum-estat">${v.llegit ? icona('check', 12) : (v.registrat ? '○' : '—')}</span>
           <span class="saga-volum-titol">${escapeHtml(v.titol || '(sense títol)')}</span>
-        </div>`).join('') : `<div class="saga-volum-buit">Encara no hi ha volums donats d'alta.</div>`}
+          <span class="saga-volum-compra saga-volum-compra--${ec.classe}">${ec.txt}</span>
+        </div>`;
+      }).join('') : `<div class="saga-volum-buit">Encara no hi ha volums donats d'alta.</div>`}
     </div>` : '';
   return `
     <div class="card-saga${s.completa ? ' completa' : ''}" data-saga-toggle="${s.id}">
