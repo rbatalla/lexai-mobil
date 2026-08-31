@@ -546,6 +546,7 @@ main { flex: 1; padding: 14px 12px 80px; }
   border-radius: 14px;
   padding: 13px 14px;
   margin-bottom: 10px;
+  cursor: pointer;
 }
 .card-saga.completa { border-color: var(--green); }
 .saga-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
@@ -563,6 +564,21 @@ main { flex: 1; padding: 14px 12px 80px; }
   font-size: 12.5px; color: var(--text-lo);
 }
 .saga-seguent b { color: var(--text-hi); font-weight: 600; }
+.saga-volums {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px;
+  cursor: default;
+}
+.saga-volum-fila {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-mid);
+}
+.saga-volum-fila.llegit { color: var(--text-lo); }
+.saga-volum-fila.llegit .saga-volum-titol { text-decoration: line-through; }
+.saga-volum-estat { flex: 0 0 auto; color: var(--green); font-size: 12px; }
+.saga-volum-fila.llegit .saga-volum-estat { color: var(--green); }
+.saga-volum-titol { flex: 1; }
+.saga-volum-buit { font-size: 12.5px; color: var(--text-lo); font-style: italic; }
 
 /* ── TBR ────────────────────────────────────────────────────────────── */
 .card-tbr {
@@ -760,6 +776,9 @@ main { flex: 1; padding: 14px 12px 80px; }
   font-size: 20px; font-weight: 800; color: var(--orange);
   line-height: 1.1;
 }
+.card-llibre-pomo-restants.estimacio-grup .card-llibre-pomo-restants-num {
+  color: var(--text-lo); font-weight: 700;
+}
 .card-llibre-pomo-restants-lbl {
   font-size: 10px; color: var(--text-mid); text-transform: uppercase;
 }
@@ -803,6 +822,7 @@ main { flex: 1; padding: 14px 12px 80px; }
   margin-bottom: 8px;
 }
 .pomo-projeccio.ajustat { color: var(--green); font-weight: 600; }
+.pomo-projeccio.estimacio-grup { color: var(--text-lo); }
 
 /* ── Cites ──────────────────────────────────────────────────────────── */
 .cita-card {

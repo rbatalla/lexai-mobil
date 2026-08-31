@@ -118,7 +118,26 @@ let state = {
   citesLlibreId: null,   // llibre seleccionat a la pestanya Cites
   citesIdx: 0,            // índex de la cita mostrada dins d'aquest llibre
   tagsCita: [],            // tags existents (per als chips del formulari)
+  saguesFiltreTipus: '',   // '' = Tot | 'comic' | 'mainstream' | 'fantasia' | 'ciencia_ficcio'
+  saguesFiltreEstat: '',   // '' = Totes | 'obertes' | 'completes'
+  saguesExpandides: new Set(),  // ids de saga amb la targeta oberta (llistat de volums visible)
 };
+
+// Tipus de saga (mateixos valors que serie.tipus_saga a LEXAI escriptori,
+// TIPUS_SAGA a database.py: classificació pròpia de Sagues, independent
+// del bloc de categoria del TBR/Previsions).
+const SAGA_TIPUS = [
+  { key: '',               label: 'Tot' },
+  { key: 'comic',          label: 'Còmic' },
+  { key: 'mainstream',     label: 'Mainstream' },
+  { key: 'fantasia',       label: 'Fantasia' },
+  { key: 'ciencia_ficcio', label: 'Ciència Ficció' },
+];
+const SAGA_ESTATS = [
+  { key: '',          label: 'Totes' },
+  { key: 'obertes',   label: 'Obertes' },
+  { key: 'completes', label: 'Completes' },
+];
 
 // Categories de Reptes que compten per al comptador de copes (6 en total:
 // les 4 de llibres + Còmic + Llibres-total com una copa més del conjunt).
@@ -1408,6 +1427,8 @@ function render() {
 
   const tbrFiltres = document.getElementById('tbr-filtres');
   if (tbrFiltres) tbrFiltres.style.display = 'none';
+  const saguesFiltres = document.getElementById('sagues-filtres');
+  if (saguesFiltres) saguesFiltres.style.display = 'none';
 
   if (state.tab === 'previsions') renderPrevisions();
   else if (state.tab === 'sagues') renderSagues();
@@ -1516,8 +1537,12 @@ function renderSagues() {
   const main = document.getElementById('main');
   const nav = document.getElementById('mes-nav');
   nav.style.display = 'none';
+  const filtresEl = document.getElementById('sagues-filtres');
+  const filtresTipusEl = document.getElementById('sagues-filtres-tipus');
+  const filtresEstatEl = document.getElementById('sagues-filtres-estat');
 
   if (!state.sagues.length) {
+    if (filtresEl) filtresEl.style.display = 'none';
     main.innerHTML = `
       <div class="buit">
         <div class="icona">${icona('llibre', 40)}</div>
@@ -1530,12 +1555,66 @@ function renderSagues() {
     return;
   }
 
-  const enCurs = state.sagues.filter(s => !s.completa);
-  const completes = state.sagues.filter(s => s.completa);
+  // Construir les dues barres de filtres un únic cop; delegació d'esdeveniments
+  // (mateix patró que renderTbr).
+  if (filtresTipusEl && !filtresTipusEl.dataset.build) {
+    filtresTipusEl.innerHTML = SAGA_TIPUS.map(c =>
+      `<button class="tbr-filtre-btn" data-tipus="${c.key}">${escapeHtml(c.label)}</button>`
+    ).join('');
+    filtresTipusEl.dataset.build = '1';
+    filtresTipusEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tbr-filtre-btn');
+      if (!btn) return;
+      state.saguesFiltreTipus = btn.getAttribute('data-tipus');
+      renderSagues();
+    });
+  }
+  if (filtresEstatEl && !filtresEstatEl.dataset.build) {
+    filtresEstatEl.innerHTML = SAGA_ESTATS.map(c =>
+      `<button class="tbr-filtre-btn" data-estat="${c.key}">${escapeHtml(c.label)}</button>`
+    ).join('');
+    filtresEstatEl.dataset.build = '1';
+    filtresEstatEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tbr-filtre-btn');
+      if (!btn) return;
+      state.saguesFiltreEstat = btn.getAttribute('data-estat');
+      renderSagues();
+    });
+  }
+  if (filtresEl) {
+    filtresEl.style.display = 'block';
+    filtresTipusEl.querySelectorAll('.tbr-filtre-btn').forEach(b => {
+      b.classList.toggle('actiu', b.getAttribute('data-tipus') === state.saguesFiltreTipus);
+    });
+    filtresEstatEl.querySelectorAll('.tbr-filtre-btn').forEach(b => {
+      b.classList.toggle('actiu', b.getAttribute('data-estat') === state.saguesFiltreEstat);
+    });
+  }
 
-  let html = `<div class="seccio-titol" style="color:var(--text-label);">En curs
+  const llista = state.sagues.filter(s => {
+    if (state.saguesFiltreTipus && s.tipus_saga !== state.saguesFiltreTipus) return false;
+    if (state.saguesFiltreEstat === 'obertes' && s.completa) return false;
+    if (state.saguesFiltreEstat === 'completes' && !s.completa) return false;
+    return true;
+  });
+
+  if (!llista.length) {
+    main.innerHTML = `<div class="buit" style="padding:40px 24px;">
+        <div class="icona">${icona('llibre', 40)}</div>
+        <p>Cap saga coincideix amb el filtre.</p>
+      </div>`;
+    return;
+  }
+
+  const enCurs = llista.filter(s => !s.completa);
+  const completes = llista.filter(s => s.completa);
+
+  let html = '';
+  if (enCurs.length) {
+    html += `<div class="seccio-titol" style="color:var(--text-label);">En curs
                 <span class="comptador">${enCurs.length}</span></div>`;
-  for (const s of enCurs) html += renderCardSaga(s);
+    for (const s of enCurs) html += renderCardSaga(s);
+  }
 
   if (completes.length) {
     html += `<div class="seccio-titol comprat" style="margin-top:18px;">Completades
@@ -1544,6 +1623,18 @@ function renderSagues() {
   }
 
   main.innerHTML = html;
+
+  main.querySelectorAll('[data-saga-toggle]').forEach(card => {
+    card.addEventListener('click', (e) => {
+      // No obrir/tancar l'accordion si el toc és dins la llista de volums
+      // ja expandida (evita que fer scroll pel llistat el tanqui sol).
+      if (e.target.closest('.saga-volums')) return;
+      const sid = card.getAttribute('data-saga-toggle');
+      if (state.saguesExpandides.has(sid)) state.saguesExpandides.delete(sid);
+      else state.saguesExpandides.add(sid);
+      renderSagues();
+    });
+  });
 }
 
 function renderCardSaga(s) {
@@ -1553,8 +1644,18 @@ function renderCardSaga(s) {
   const seguentHtml = (!s.completa && s.seguent_titol) ? `
     <div class="saga-seguent">Següent a llegir: <b>${escapeHtml(s.seguent_titol)}</b>${s.seguent_autor ? ' — ' + escapeHtml(s.seguent_autor) : ''}</div>
   ` : '';
+  const expandida = state.saguesExpandides.has(String(s.id));
+  const volums = s.volums || [];
+  const volumsHtml = expandida ? `
+    <div class="saga-volums">
+      ${volums.length ? volums.map(v => `
+        <div class="saga-volum-fila${v.llegit ? ' llegit' : ''}">
+          <span class="saga-volum-estat">${v.llegit ? icona('check', 12) : (v.registrat ? '○' : '—')}</span>
+          <span class="saga-volum-titol">${escapeHtml(v.titol || '(sense títol)')}</span>
+        </div>`).join('') : `<div class="saga-volum-buit">Encara no hi ha volums donats d'alta.</div>`}
+    </div>` : '';
   return `
-    <div class="card-saga${s.completa ? ' completa' : ''}">
+    <div class="card-saga${s.completa ? ' completa' : ''}" data-saga-toggle="${s.id}">
       <div class="saga-top">
         <div class="saga-nom">${escapeHtml(s.nom)}</div>
         <span class="saga-badge${s.completa ? ' completa' : ''}">${s.completa ? icona('check', 13) + ' Completa' : badgeTxt}</span>
@@ -1562,6 +1663,7 @@ function renderCardSaga(s) {
       <div class="progress-track"><div class="progress-fill${s.completa ? ' verd' : ''}" style="width:${pct}%"></div></div>
       <div class="saga-progres-txt"><span>${s.llegits} llegits</span><span>${total ? (total - s.llegits) + ' pendents' : ''}</span></div>
       ${seguentHtml}
+      ${volumsHtml}
     </div>`;
 }
 
@@ -2113,8 +2215,13 @@ function renderPomodoro() {
     // Mateix valor exacte que el badge de la targeta (_actualitzarPomodorosRestants
     // és l'única font de veritat) -- ja no es recalcula aquí per separat.
     const ajustat = !!llibreSeleccionat.pomodorosAjustat;
-    projeccioHtml = `<div class="pomo-projeccio${ajustat ? ' ajustat' : ''}">
-        ~${llibreSeleccionat.pomodoros_restants} pomodoros per acabar${ajustat ? ' (ajustat)' : ''}
+    // pomodoros_estimacio_grup: el llibre encara no té cap pomodoro propi i
+    // el valor ve del promig de categoria/global (mateix criteri visual que
+    // "es_estimacio_grup" a l'escriptori: marcat com a aproximació, no dada
+    // pròpia del llibre).
+    const esGrup = !!llibreSeleccionat.pomodoros_estimacio_grup;
+    projeccioHtml = `<div class="pomo-projeccio${ajustat ? ' ajustat' : ''}${esGrup ? ' estimacio-grup' : ''}">
+        ~${llibreSeleccionat.pomodoros_restants} pomodoros per acabar${ajustat ? ' (ajustat)' : ''}${esGrup ? ' *' : ''}
       </div>`;
   }
 
@@ -2149,6 +2256,7 @@ function renderPomodoro() {
       const seleccionat = l.id === pomo.llibreId;
       const pct = l.pagines ? Math.min(100, Math.round((l.pagina_actual / l.pagines) * 100)) : null;
       const teRestants = typeof l.pomodoros_restants === 'number';
+      const esGrup = !!l.pomodoros_estimacio_grup;
       return `
         <button class="card-llibre-pomo${seleccionat ? ' seleccionat' : ''}"
                 data-llibre-id="${l.id}" ${pomo.enCurs ? 'disabled' : ''}>
@@ -2156,11 +2264,11 @@ function renderPomodoro() {
             <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
             ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
             <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
-            ${l.pag_per_pomodoro ? `<div class="card-llibre-pomo-proj">≈${l.pag_per_pomodoro} pàg/pom</div>` : ''}
+            ${l.pag_per_pomodoro ? `<div class="card-llibre-pomo-proj">≈${l.pag_per_pomodoro} pàg/pom${esGrup ? ' *' : ''}</div>` : ''}
           </div>
           ${teRestants ? `
-          <div class="card-llibre-pomo-restants" title="Pomodoros estimats per acabar el llibre">
-            <span class="card-llibre-pomo-restants-num">${l.pomodoros_restants}</span>
+          <div class="card-llibre-pomo-restants${esGrup ? ' estimacio-grup' : ''}" title="${esGrup ? 'Estimació aproximada (encara sense pomodoros propis d\u2019aquest llibre)' : 'Pomodoros estimats per acabar el llibre'}">
+            <span class="card-llibre-pomo-restants-num">${l.pomodoros_restants}${esGrup ? '*' : ''}</span>
             <span class="card-llibre-pomo-restants-lbl">pom.</span>
           </div>` : ''}
         </button>`;
