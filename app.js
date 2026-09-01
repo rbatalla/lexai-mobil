@@ -1427,7 +1427,12 @@ function toggleMarcat(id) {
   const r = state.previsions.find(x => x.id === id);
   if (!r) return;
   r.marcat = !r.marcat;
-  desarDades({ previsions: state.previsions, sagues: state.sagues, tbr: state.tbr, reptes: state.reptes });
+  desarDades({
+    previsions: state.previsions, sagues: state.sagues, tbr: state.tbr,
+    reptes: state.reptes, llibresEnCurs: state.llibresEnCurs,
+    mesosTancats: state.mesosTancats, tagsCita: state.tagsCita,
+    catalegLlibres: state.catalegLlibres,
+  });
   render();
 }
 
@@ -2584,11 +2589,19 @@ function fotoRenderResultatsCerca(query) {
   }
   llista = llista.slice(0, 40);
   if (!llista.length) {
-    cont.innerHTML = `<div class="foto-cerca-buit">${
-      (state.catalegLlibres || []).length
-        ? (q ? 'Cap llibre coincideix.' : 'Escriu per cercar un llibre.')
-        : 'Encara no hi ha catàleg de llibres sincronitzat. Prem "Descarregar dades".'
-    }</div>`;
+    const senseCataleg = !(state.catalegLlibres || []).length;
+    cont.innerHTML = `<div class="foto-cerca-buit">
+        ${senseCataleg
+          ? 'Encara no hi ha catàleg de llibres sincronitzat.'
+          : (q ? 'Cap llibre coincideix.' : 'Escriu per cercar un llibre.')}
+        ${senseCataleg ? `<button class="btn-marcar" id="btn-foto-github" style="margin-top:14px;">${icona('refrescar', 15)} Actualitzar des de GitHub</button>` : ''}
+      </div>`;
+    if (senseCataleg) {
+      document.getElementById('btn-foto-github').addEventListener('click', async () => {
+        await actualitzarDesDeGithub();
+        fotoRenderResultatsCerca(document.getElementById('foto-cerca-input').value);
+      });
+    }
     return;
   }
   cont.innerHTML = llista.map(l => `

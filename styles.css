@@ -577,12 +577,12 @@ main { flex: 1; padding: 14px 12px 80px; }
 .saga-volum-icona {
   flex: 0 0 auto; display: flex;
 }
-.saga-volum-fila--llegit        { color: var(--text-lo); }
-.saga-volum-fila--llegit .saga-volum-titol { text-decoration: line-through; }
-.saga-volum-fila--llegit .saga-volum-icona        { color: var(--green); }
-.saga-volum-fila--registrat .saga-volum-icona     { color: #5aa0ff; }
+.saga-volum-fila--llegit        { color: var(--text-hi); }
+.saga-volum-fila--llegit .saga-volum-icona        { color: var(--text-hi); }
+.saga-volum-fila--registrat .saga-volum-icona     { color: #f0c94a; }
+.saga-volum-fila--registrat .saga-volum-titol     { color: #f0c94a; }
 .saga-volum-fila--disponible .saga-volum-icona    { color: var(--orange); }
-.saga-volum-fila--disponible .saga-volum-titol    { color: var(--text-hi); }
+.saga-volum-fila--disponible .saga-volum-titol    { color: var(--orange); }
 .saga-volum-fila--no-disponible .saga-volum-icona { color: var(--text-lo); }
 .saga-volum-fila--no-disponible { color: var(--text-lo); }
 .saga-volum-titol { flex: 1; }
