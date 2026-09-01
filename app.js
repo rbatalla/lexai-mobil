@@ -32,6 +32,9 @@ const ICONES = {
   stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
   cita: '<path d="M3 20l1.3 -3.9a9 8 0 1 1 3.4 2.9l-4.7 1"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/>',
   ampliar: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M12 1v3"/><path d="M9 1h6"/>',
+  camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/>',
+  tancar: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  fletxaEsquerra: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
 };
 
 function icona(nom, mida) {
@@ -55,6 +58,8 @@ const PREVISIONS_NOVES_PATH = 'data/lexai_mobil_previsions_noves.json';
 const PREVISIONS_NOVES_KEY = 'lexaiMobil_previsions_noves_v1';
 const CITES_NOVES_PATH = 'data/lexai_mobil_cites_noves.json';
 const CITES_NOVES_KEY = 'lexaiMobil_cites_noves_v1';
+const FOTOS_NOVES_PATH = 'data/lexai_mobil_imatges_noves.json';
+const FOTOS_NOVES_KEY = 'lexaiMobil_fotos_noves_v1';
 // Mateixos vocabularis que TIPUS_CITA/IMPACTE_CITA a lexai/database.py —
 // canvien poc, es mantenen fixos aquí (com TBR_CATEGORIES) en lloc de
 // sincronitzar-los des de l'escriptori.
@@ -121,6 +126,7 @@ let state = {
   saguesFiltreTipus: '',   // '' = Tot | 'comic' | 'mainstream' | 'fantasia' | 'ciencia_ficcio'
   saguesFiltreEstat: '',   // '' = Totes | 'obertes' | 'completes'
   saguesExpandides: new Set(),  // ids de saga amb la targeta oberta (llistat de volums visible)
+  catalegLlibres: [],      // {id, titol, autor} de tots els llibres -- per assignar fotos
 };
 
 // Tipus de saga (mateixos valors que serie.tipus_saga a LEXAI escriptori,
@@ -137,6 +143,17 @@ const SAGA_ESTATS = [
   { key: '',          label: 'Totes' },
   { key: 'obertes',   label: 'Obertes' },
   { key: 'completes', label: 'Completes' },
+];
+
+// Tipus de foto de llibre (mateixos valors que TIPUS_IMATGE a database.py).
+// 'ar' = amplada/alçada del retall (aspect ratio) més natural per a cada
+// tipus -- coberta/contracoberta són gairebé quadrades-verticals, el llom
+// és una tira molt estreta, la prestatgeria és apaïsada.
+const TIPUS_IMATGE_LLIBRE = [
+  { key: 'coberta',       label: 'Coberta',                      ar: 2 / 3 },
+  { key: 'contracoberta', label: 'Contracoberta',                ar: 2 / 3 },
+  { key: 'llom',          label: 'Llom',                         ar: 1 / 4 },
+  { key: 'prestatgeria',  label: 'Posició a la prestatgeria',    ar: 4 / 3 },
 ];
 
 // Categories de Reptes que compten per al comptador de copes (6 en total:
@@ -193,7 +210,7 @@ let pomo = {
 function carregarDades() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [], tagsCita: [] };
+    if (!raw) return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [], tagsCita: [], catalegLlibres: [] };
     const d = JSON.parse(raw);
     return {
       previsions: d.previsions || [],
@@ -203,10 +220,11 @@ function carregarDades() {
       llibresEnCurs: d.llibresEnCurs || [],
       mesosTancats: d.mesosTancats || [],
       tagsCita: d.tagsCita || [],
+      catalegLlibres: d.catalegLlibres || [],
     };
   } catch (e) {
     console.error('Error llegint dades locals:', e);
-    return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [], tagsCita: [] };
+    return { previsions: [], sagues: [], tbr: [], reptes: null, llibresEnCurs: [], mesosTancats: [], tagsCita: [], catalegLlibres: [] };
   }
 }
 
@@ -519,7 +537,7 @@ function obrirFormNovaPrevisio(mes) {
     desarDades({
       previsions: state.previsions, sagues: state.sagues, tbr: state.tbr,
       reptes: state.reptes, llibresEnCurs: state.llibresEnCurs,
-      mesosTancats: state.mesosTancats,
+      mesosTancats: state.mesosTancats, catalegLlibres: state.catalegLlibres,
     });
 
     afegirPrevisioNovaPendent(nova);
@@ -1321,6 +1339,7 @@ function aplicarNovesDades(previsionsRows, extra, meta) {
     llibresEnCurs: extra ? (extra.llibresEnCurs || []) : (actual.llibresEnCurs || []),
     mesosTancats: extra ? (extra.mesosTancats || []) : (actual.mesosTancats || []),
     tagsCita: extra ? (extra.tagsCita || []) : (actual.tagsCita || []),
+    catalegLlibres: extra ? (extra.catalegLlibres || []) : (actual.catalegLlibres || []),
   };
   state.previsions = noves.previsions;
   state.sagues = noves.sagues;
@@ -1329,6 +1348,7 @@ function aplicarNovesDades(previsionsRows, extra, meta) {
   state.llibresEnCurs = noves.llibresEnCurs;
   state.mesosTancats = noves.mesosTancats;
   state.tagsCita = noves.tagsCita;
+  state.catalegLlibres = noves.catalegLlibres;
   desarDades(noves);
   desarMeta(meta);
 
@@ -1378,11 +1398,12 @@ async function actualitzarDesDeGithub() {
   if (!localStorage.getItem(POMODORO_CONFIG_KEY) && dades.focus_config) {
     desarConfigPomodoro({ ...POMODORO_CONFIG_DEFECTE, ...dades.focus_config });
   }
-  // Aprofitem que hi ha connexió per intentar pujar pomodoros, previsions
-  // i cites noves pendents.
+  // Aprofitem que hi ha connexió per intentar pujar pomodoros, previsions,
+  // cites i fotos de llibre noves pendents.
   enviarPomodorosPendents();
   enviarPrevisionsNovesPendents();
   enviarCitesNovesPendents();
+  enviarFotosNovesPendents();
 
   aplicarNovesDades(rows, {
     sagues: Array.isArray(dades.sagues) ? dades.sagues : [],
@@ -1391,6 +1412,7 @@ async function actualitzarDesDeGithub() {
     llibresEnCurs: Array.isArray(dades.llibres_en_curs) ? dades.llibres_en_curs : [],
     mesosTancats: Array.isArray(dades.mesos_tancats) ? dades.mesos_tancats : [],
     tagsCita: Array.isArray(dades.tags_cita) ? dades.tags_cita : [],
+    catalegLlibres: Array.isArray(dades.cataleg_llibres) ? dades.cataleg_llibres : [],
   }, {
     font: 'github',
     data_importacio: new Date().toISOString(),
@@ -2150,6 +2172,7 @@ function obrirFormNovaCita(llibreId) {
       previsions: state.previsions, sagues: state.sagues, tbr: state.tbr,
       reptes: state.reptes, llibresEnCurs: state.llibresEnCurs,
       mesosTancats: state.mesosTancats, tagsCita: state.tagsCita,
+      catalegLlibres: state.catalegLlibres,
     });
 
     afegirCitaNovaPendent(nova);
@@ -2406,6 +2429,8 @@ function injectarIconesFixes() {
   document.getElementById('btn-forcar-update').innerHTML = icona('forcar', 19);
   document.getElementById('btn-config-github').innerHTML = icona('config', 19);
   document.getElementById('btn-minimitzar').innerHTML = icona('minimitzar', 19);
+  document.getElementById('btn-foto-llibre').innerHTML = icona('camera', 19);
+  document.getElementById('btn-foto-tancar').innerHTML = icona('tancar', 16);
   document.getElementById('btn-mes-ant').innerHTML = icona('chevronEsquerra', 20);
   document.getElementById('btn-mes-seg').innerHTML = icona('chevronDreta', 20);
   document.getElementById('nav-previsions').innerHTML = icona('calendari', 20) + '<span>Previsions</span>';
@@ -2507,6 +2532,313 @@ function tancarModalInfo() {
   document.getElementById('modal-info').classList.add('oculta');
 }
 
+// ── Fotos de llibre (coberta/contracoberta/llom/prestatgeria) ──────────────
+// Flux: cercar llibre -> triar tipus -> càmera/galeria -> retallar (pan +
+// zoom sobre un viewport amb l'aspect ratio propi del tipus) -> es desa en
+// cua local i es puja a GitHub (mateix patró que previsions/cites noves,
+// però aquí cada entrada porta la imatge sencera en base64).
+let fotoFlow = null;
+let _fotoDragOrigin = null;
+
+function obrirFluxFoto() {
+  fotoFlow = { pas: 'cercar', llibreId: null, llibreTitol: '', tipus: null };
+  document.getElementById('modal-foto-llibre').classList.remove('oculta');
+  fotoAnarPas('cercar');
+  const input = document.getElementById('foto-cerca-input');
+  input.value = '';
+  fotoRenderResultatsCerca('');
+  setTimeout(() => input.focus(), 50);
+}
+
+function tancarFluxFoto() {
+  document.getElementById('modal-foto-llibre').classList.add('oculta');
+  fotoFlow = null;
+  _fotoDragOrigin = null;
+}
+
+function fotoAnarPas(pas) {
+  if (!fotoFlow) return;
+  fotoFlow.pas = pas;
+  const titols = {
+    cercar: 'Cerca el llibre',
+    tipus: 'Quina part vols fotografiar?',
+    retall: 'Ajusta el retall',
+  };
+  document.getElementById('foto-pas-titol').textContent = titols[pas] || '';
+  document.getElementById('foto-pas-cercar').classList.toggle('oculta', pas !== 'cercar');
+  document.getElementById('foto-pas-tipus').classList.toggle('oculta', pas !== 'tipus');
+  document.getElementById('foto-pas-retall').classList.toggle('oculta', pas !== 'retall');
+}
+
+function normalitzarCerca(txt) {
+  return (txt || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function fotoRenderResultatsCerca(query) {
+  const cont = document.getElementById('foto-cerca-resultats');
+  const q = normalitzarCerca(query);
+  let llista = state.catalegLlibres || [];
+  if (q) {
+    llista = llista.filter(l =>
+      normalitzarCerca(l.titol).includes(q) || normalitzarCerca(l.autor).includes(q));
+  }
+  llista = llista.slice(0, 40);
+  if (!llista.length) {
+    cont.innerHTML = `<div class="foto-cerca-buit">${
+      (state.catalegLlibres || []).length
+        ? (q ? 'Cap llibre coincideix.' : 'Escriu per cercar un llibre.')
+        : 'Encara no hi ha catàleg de llibres sincronitzat. Prem "Descarregar dades".'
+    }</div>`;
+    return;
+  }
+  cont.innerHTML = llista.map(l => `
+    <button class="foto-cerca-item" data-llibre-id="${l.id}">
+      <div class="foto-cerca-item-titol">${escapeHtml(l.titol)}</div>
+      ${l.autor ? `<div class="foto-cerca-item-autor">${escapeHtml(l.autor)}</div>` : ''}
+    </button>`).join('');
+  cont.querySelectorAll('.foto-cerca-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.getAttribute('data-llibre-id'), 10);
+      const llibre = (state.catalegLlibres || []).find(l => l.id === id);
+      if (!llibre || !fotoFlow) return;
+      fotoFlow.llibreId = llibre.id;
+      fotoFlow.llibreTitol = llibre.titol;
+      fotoRenderPasTipus();
+      fotoAnarPas('tipus');
+    });
+  });
+}
+
+function fotoRenderPasTipus() {
+  document.getElementById('foto-llibre-sel').innerHTML =
+    `${icona('llibre', 16)} <b>${escapeHtml(fotoFlow.llibreTitol)}</b>`;
+  const cont = document.getElementById('foto-tipus-graella');
+  cont.innerHTML = TIPUS_IMATGE_LLIBRE.map(t => `
+    <button class="foto-tipus-btn" data-tipus="${t.key}">${escapeHtml(t.label)}</button>
+  `).join('');
+  cont.querySelectorAll('.foto-tipus-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!fotoFlow) return;
+      fotoFlow.tipus = btn.getAttribute('data-tipus');
+      document.getElementById('input-foto-llibre').click();
+    });
+  });
+}
+
+function onFotoFitxerSeleccionat(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = ''; // permetre re-seleccionar/repetir la mateixa foto
+  if (!file || !fotoFlow) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const cropImg = document.getElementById('crop-img');
+      cropImg.src = e.target.result;
+      const tipusInfo = TIPUS_IMATGE_LLIBRE.find(t => t.key === fotoFlow.tipus) || TIPUS_IMATGE_LLIBRE[0];
+      document.getElementById('crop-viewport').style.aspectRatio = String(tipusInfo.ar);
+      fotoAnarPas('retall');
+      requestAnimationFrame(() => fotoIniciarRetall(img.naturalWidth, img.naturalHeight));
+    };
+    img.onerror = () => mostrarToast('No s\'ha pogut llegir la imatge.');
+    img.src = e.target.result;
+  };
+  reader.onerror = () => mostrarToast('No s\'ha pogut llegir el fitxer.');
+  reader.readAsDataURL(file);
+}
+
+function fotoIniciarRetall(imgNatW, imgNatH) {
+  if (!fotoFlow) return;
+  const viewport = document.getElementById('crop-viewport');
+  const rect = viewport.getBoundingClientRect();
+  fotoFlow.imgNatW = imgNatW;
+  fotoFlow.imgNatH = imgNatH;
+  fotoFlow.viewportW = rect.width;
+  fotoFlow.viewportH = rect.height;
+  // "Cover fit": la imatge sempre cobreix tot el viewport (mai marges buits),
+  // l'usuari només pot allunyar-se fins al punt de cobrir-lo just.
+  fotoFlow.baseScale = Math.max(fotoFlow.viewportW / imgNatW, fotoFlow.viewportH / imgNatH);
+  fotoFlow.scale = fotoFlow.baseScale;
+  fotoFlow.tx = (fotoFlow.viewportW - imgNatW * fotoFlow.scale) / 2;
+  fotoFlow.ty = (fotoFlow.viewportH - imgNatH * fotoFlow.scale) / 2;
+  document.getElementById('crop-zoom').value = 100;
+  fotoActualitzarTransform();
+}
+
+function fotoClampTxTy() {
+  const dispW = fotoFlow.imgNatW * fotoFlow.scale;
+  const dispH = fotoFlow.imgNatH * fotoFlow.scale;
+  const minTx = Math.min(0, fotoFlow.viewportW - dispW);
+  const minTy = Math.min(0, fotoFlow.viewportH - dispH);
+  fotoFlow.tx = Math.max(minTx, Math.min(0, fotoFlow.tx));
+  fotoFlow.ty = Math.max(minTy, Math.min(0, fotoFlow.ty));
+}
+
+function fotoActualitzarTransform() {
+  const img = document.getElementById('crop-img');
+  if (!img || !fotoFlow) return;
+  img.style.width = (fotoFlow.imgNatW * fotoFlow.scale) + 'px';
+  img.style.height = (fotoFlow.imgNatH * fotoFlow.scale) + 'px';
+  img.style.left = fotoFlow.tx + 'px';
+  img.style.top = fotoFlow.ty + 'px';
+}
+
+function fotoViewportPointerDown(ev) {
+  if (!fotoFlow) return;
+  ev.preventDefault();
+  _fotoDragOrigin = { x: ev.clientX, y: ev.clientY, tx: fotoFlow.tx, ty: fotoFlow.ty };
+  try { ev.target.setPointerCapture(ev.pointerId); } catch (e) { /* ignorable */ }
+}
+function fotoViewportPointerMove(ev) {
+  if (!_fotoDragOrigin || !fotoFlow) return;
+  ev.preventDefault();
+  fotoFlow.tx = _fotoDragOrigin.tx + (ev.clientX - _fotoDragOrigin.x);
+  fotoFlow.ty = _fotoDragOrigin.ty + (ev.clientY - _fotoDragOrigin.y);
+  fotoClampTxTy();
+  fotoActualitzarTransform();
+}
+function fotoViewportPointerUp() {
+  _fotoDragOrigin = null;
+}
+
+function fotoZoomCanviat(ev) {
+  if (!fotoFlow) return;
+  const factor = parseInt(ev.target.value, 10) / 100;
+  const novaScale = fotoFlow.baseScale * factor;
+  // Mantenir fix el centre del viewport en fer zoom, perquè la imatge no
+  // "salti" en canviar l'escala.
+  const cx = fotoFlow.viewportW / 2, cy = fotoFlow.viewportH / 2;
+  const imgX = (cx - fotoFlow.tx) / fotoFlow.scale;
+  const imgY = (cy - fotoFlow.ty) / fotoFlow.scale;
+  fotoFlow.scale = novaScale;
+  fotoFlow.tx = cx - imgX * novaScale;
+  fotoFlow.ty = cy - imgY * novaScale;
+  fotoClampTxTy();
+  fotoActualitzarTransform();
+}
+
+function fotoSortidaDims(ar) {
+  // Costat llarg fix a 1400px, l'altre costat es deriva de l'aspect ratio
+  // del tipus -- prou resolució per a una foto de llibre sense disparar
+  // el pes del fitxer (i per tant el JSON que es puja a GitHub).
+  if (ar <= 1) {
+    const h = 1400;
+    return { w: Math.round(h * ar), h };
+  }
+  const w = 1400;
+  return { w, h: Math.round(w / ar) };
+}
+
+function fotoConfirmar() {
+  if (!fotoFlow) return;
+  const tipusInfo = TIPUS_IMATGE_LLIBRE.find(t => t.key === fotoFlow.tipus) || TIPUS_IMATGE_LLIBRE[0];
+  const outDims = fotoSortidaDims(tipusInfo.ar);
+  const sx = -fotoFlow.tx / fotoFlow.scale;
+  const sy = -fotoFlow.ty / fotoFlow.scale;
+  const sw = fotoFlow.viewportW / fotoFlow.scale;
+  const sh = fotoFlow.viewportH / fotoFlow.scale;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outDims.w; canvas.height = outDims.h;
+  const ctx = canvas.getContext('2d');
+  const img = document.getElementById('crop-img');
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outDims.w, outDims.h);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  const base64 = dataUrl.split(',')[1];
+  if (!base64) {
+    mostrarToast('No s\'ha pogut processar la foto.');
+    return;
+  }
+
+  const pendent = {
+    client_id: 'foto_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    llibre_id: fotoFlow.llibreId,
+    llibre_titol: fotoFlow.llibreTitol,
+    tipus: fotoFlow.tipus,
+    nom_fitxer: `llibre${fotoFlow.llibreId}_${fotoFlow.tipus}.jpg`,
+    data_captura: new Date().toISOString(),
+    contingut_base64: base64,
+  };
+  afegirFotoNovaPendent(pendent);
+  mostrarToast('Foto desada — s\'enviarà a l\'escriptori en sincronitzar.');
+  tancarFluxFoto();
+  enviarFotosNovesPendents(); // best-effort, no bloqueja
+}
+
+function obtenirFotosNovesPendents() {
+  try {
+    const raw = localStorage.getItem(FOTOS_NOVES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function afegirFotoNovaPendent(foto) {
+  const pendents = obtenirFotosNovesPendents();
+  pendents.push(foto);
+  try {
+    localStorage.setItem(FOTOS_NOVES_KEY, JSON.stringify(pendents));
+  } catch (e) {
+    console.error('Error desant foto pendent:', e);
+    mostrarToast('No s\'ha pogut desar la foto localment (espai insuficient?). Sincronitza abans de fer-ne més.');
+  }
+}
+
+async function enviarFotosNovesPendents() {
+  const pendents = obtenirFotosNovesPendents();
+  if (!pendents.length) return { ok: true };
+  const token = localStorage.getItem(GITHUB_TOKEN_KEY);
+  if (!token) return { ok: false, motiu: 'sense token configurat' };
+  const repo = obtenirRepoGithub();
+  const url = `https://api.github.com/repos/${repo}/contents/${FOTOS_NOVES_PATH}`;
+  try {
+    let sha = null;
+    let remots = [];
+    const getResp = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    });
+    if (getResp.ok) {
+      const meta = await getResp.json();
+      sha = meta.sha;
+      if (meta.content) {
+        try {
+          const decodificat = decodeURIComponent(escape(atob(meta.content.replace(/\n/g, ''))));
+          const parsed = JSON.parse(decodificat);
+          if (Array.isArray(parsed)) remots = parsed;
+        } catch (e) { /* contingut il·legible -> es continua només amb els locals */ }
+      }
+    } else if (getResp.status !== 404) {
+      return { ok: false, motiu: `error llegint el fitxer (HTTP ${getResp.status})` };
+    }
+
+    // NOTA: a diferència de previsions/cites (objectes petits), cada
+    // entrada d'aquí porta la imatge sencera en base64 -- aquest fitxer
+    // remot només s'anirà buidant quan l'escriptori importi les fotos i
+    // n'esborri les entrades ja processades.
+    const clausRemots = new Set(remots.map(f => f.client_id));
+    const unio = remots.concat(pendents.filter(f => !clausRemots.has(f.client_id)));
+
+    const contingut = btoa(unescape(encodeURIComponent(JSON.stringify(unio))));
+    const body = { message: 'LEXAI Mòbil: fotos de llibre noves', content: contingut };
+    if (sha) body.sha = sha;
+    const putResp = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (putResp.ok) {
+      localStorage.removeItem(FOTOS_NOVES_KEY);
+      return { ok: true };
+    }
+    let detall = '';
+    try {
+      const errJson = await putResp.json();
+      detall = errJson && errJson.message ? errJson.message : '';
+    } catch (e) { /* resposta sense JSON llegible */ }
+    return { ok: false, motiu: `HTTP ${putResp.status}${detall ? ' · ' + detall : ''}` };
+  } catch (e) {
+    return { ok: false, motiu: (e && e.message) ? e.message : 'error de xarxa' };
+  }
+}
+
 // ── Inicialització ────────────────────────────────────────────────────────
 
 function init() {
@@ -2518,6 +2850,7 @@ function init() {
   state.llibresEnCurs = dades.llibresEnCurs || [];
   state.mesosTancats = dades.mesosTancats || [];
   state.tagsCita = dades.tagsCita || [];
+  state.catalegLlibres = dades.catalegLlibres || [];
   state.mesos = mesosDisponibles(state.previsions);
   const mesActual = new Date().toISOString().slice(0, 7);
   const idxActual = state.mesos.indexOf(mesActual);
@@ -2545,6 +2878,23 @@ function init() {
     if (e.target.id === 'modal-info') tancarModalInfo();
   });
 
+  // ── Fotos de llibre ──
+  document.getElementById('btn-foto-llibre').addEventListener('click', obrirFluxFoto);
+  document.getElementById('btn-foto-tancar').addEventListener('click', tancarFluxFoto);
+  document.getElementById('foto-cerca-input').addEventListener('input', (e) => fotoRenderResultatsCerca(e.target.value));
+  document.getElementById('input-foto-llibre').addEventListener('change', onFotoFitxerSeleccionat);
+  document.getElementById('btn-foto-repetir').addEventListener('click', () => {
+    document.getElementById('input-foto-llibre').click();
+  });
+  document.getElementById('btn-foto-confirmar').addEventListener('click', fotoConfirmar);
+  document.getElementById('crop-zoom').addEventListener('input', fotoZoomCanviat);
+  const cropViewport = document.getElementById('crop-viewport');
+  cropViewport.addEventListener('pointerdown', fotoViewportPointerDown);
+  cropViewport.addEventListener('pointermove', fotoViewportPointerMove);
+  cropViewport.addEventListener('pointerup', fotoViewportPointerUp);
+  cropViewport.addEventListener('pointercancel', fotoViewportPointerUp);
+  cropViewport.addEventListener('pointerleave', fotoViewportPointerUp);
+
   render();
 
   if ('serviceWorker' in navigator) {
@@ -2562,6 +2912,7 @@ function init() {
       enviarPomodorosPendents();
       enviarPrevisionsNovesPendents();
       enviarCitesNovesPendents();
+      enviarFotosNovesPendents();
     } else if (pomo.enCurs && !pomo.pausat) {
       // El navegador allibera el Wake Lock sol quan la pantalla es bloqueja;
       // cal tornar-lo a demanar en tornar a l'app si el focus segueix actiu.
@@ -2572,6 +2923,7 @@ function init() {
     enviarPomodorosPendents();
     enviarPrevisionsNovesPendents();
     enviarCitesNovesPendents();
+    enviarFotosNovesPendents();
   });
 
   window.addEventListener('resize', () => {

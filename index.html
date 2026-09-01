@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=186">
+<link rel="stylesheet" href="styles.css?v=187">
 </head>
 <body>
 <div id="app">
@@ -19,6 +19,7 @@
     <div class="brand">
       <div class="brand-title" id="brand-title" role="button" tabindex="0">LEX<span class="ai">AI</span> Mòbil</div>
       <div style="display:flex; gap:8px;">
+        <button class="btn-icon" id="btn-foto-llibre" title="Afegir foto de llibre" aria-label="Afegir foto de llibre"></button>
         <button class="btn-icon" id="btn-importar" title="Descarregar dades" aria-label="Descarregar dades" style="position:relative;"></button>
         <button class="btn-icon" id="btn-config-github" title="Configurar adreça GitHub" aria-label="Configurar adreça GitHub"></button>
         <button class="btn-icon" id="btn-forcar-update" title="Forçar actualització de l'app" aria-label="Forçar actualització"></button>
@@ -55,6 +56,38 @@
     </div>
   </div>
 
+  <div class="modal-overlay oculta" id="modal-foto-llibre">
+    <div class="modal-foto-cos">
+      <div class="modal-foto-header">
+        <button class="btn-icon" id="btn-foto-tancar" aria-label="Tancar"></button>
+        <div class="modal-foto-titol" id="foto-pas-titol">Cerca el llibre</div>
+        <div style="width:36px;"></div>
+      </div>
+
+      <div class="foto-pas" id="foto-pas-cercar">
+        <input type="text" id="foto-cerca-input" class="foto-cerca-input" placeholder="Cerca un llibre per títol o autor..." autocomplete="off">
+        <div class="foto-cerca-resultats" id="foto-cerca-resultats"></div>
+      </div>
+
+      <div class="foto-pas oculta" id="foto-pas-tipus">
+        <div class="foto-llibre-sel" id="foto-llibre-sel"></div>
+        <div class="foto-tipus-graella" id="foto-tipus-graella"></div>
+      </div>
+
+      <div class="foto-pas oculta" id="foto-pas-retall">
+        <div class="crop-viewport" id="crop-viewport">
+          <img id="crop-img" draggable="false" alt="">
+        </div>
+        <input type="range" id="crop-zoom" min="100" max="400" value="100">
+        <div class="foto-retall-accions">
+          <button class="btn-secundari" id="btn-foto-repetir">Repetir foto</button>
+          <button class="btn-marcar" id="btn-foto-confirmar">Fer servir aquesta foto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="input-foto-llibre" accept="image/*" capture="environment" style="display:none;">
+
   <div class="bottom-nav">
     <button class="nav-item actiu" id="nav-previsions" data-tab="previsions"></button>
     <button class="nav-item" id="nav-sagues" data-tab="sagues"></button>
@@ -67,6 +100,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="app.js?v=186"></script>
+<script src="app.js?v=187"></script>
 </body>
 </html>
