@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.9.1';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -2651,10 +2651,16 @@ function onFotoFitxerSeleccionat(ev) {
     img.onload = () => {
       const cropImg = document.getElementById('crop-img');
       cropImg.src = e.target.result;
-      const tipusInfo = TIPUS_IMATGE_LLIBRE.find(t => t.key === fotoFlow.tipus) || TIPUS_IMATGE_LLIBRE[0];
-      document.getElementById('crop-viewport').style.aspectRatio = String(tipusInfo.ar);
       fotoAnarPas('retall');
-      requestAnimationFrame(() => fotoIniciarRetall(img.naturalWidth, img.naturalHeight));
+      // Doble requestAnimationFrame: la primera garanteix que el navegador
+      // ha aplicat el canvi de visibilitat (treure "oculta"); la segona,
+      // que ja ha fet un cicle complet de layout abans de mesurar. Amb
+      // una sola rAF, en alguns navegadors la mesura arribava massa
+      // d'hora i donava una amplada/alçada de 0 -- que feia sortir una
+      // escala (i per tant un zoom) disparatada.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => fotoIniciarRetall(img.naturalWidth, img.naturalHeight));
+      });
     };
     img.onerror = () => mostrarToast('No s\'ha pogut llegir la imatge.');
     img.src = e.target.result;
@@ -2669,6 +2675,16 @@ function fotoIniciarRetall(imgNatW, imgNatH) {
   if (!fotoFlow) return;
   const wrapper = document.getElementById('crop-wrapper');
   const maxRect = wrapper.getBoundingClientRect();
+
+  // Xarxa de seguretat: si per qualsevol motiu encara no hi ha mida
+  // (0x0) en aquest punt, NO continuar amb una escala disparatada --
+  // esperar un moment més i reintentar, en lloc de mostrar la foto
+  // "superampliada" sense sentit.
+  if (!imgNatW || !imgNatH || maxRect.width < 10 || maxRect.height < 10) {
+    setTimeout(() => fotoIniciarRetall(imgNatW, imgNatH), 60);
+    return;
+  }
+
   // "Contain fit": es veu la imatge SENCERA (mai es retalla en mostrar-la);
   // el que decideix què es guarda és el rectangle de retall, no el viewport.
   const scale = Math.min(maxRect.width / imgNatW, maxRect.height / imgNatH);
