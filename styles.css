@@ -570,24 +570,23 @@ main { flex: 1; padding: 14px 12px 80px; }
   cursor: default;
 }
 .saga-volum-fila {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 13px; color: var(--text-mid);
+  display: flex; align-items: center; gap: 12px;
+  font-size: 15.5px; font-weight: 600; color: var(--text-mid);
+  padding: 4px 0;
 }
-.saga-volum-fila.llegit { color: var(--text-lo); }
-.saga-volum-fila.llegit .saga-volum-titol { text-decoration: line-through; }
-.saga-volum-estat { flex: 0 0 auto; color: var(--green); font-size: 12px; }
-.saga-volum-fila.llegit .saga-volum-estat { color: var(--green); }
+.saga-volum-icona {
+  flex: 0 0 auto; display: flex;
+}
+.saga-volum-fila--llegit        { color: var(--text-lo); }
+.saga-volum-fila--llegit .saga-volum-titol { text-decoration: line-through; }
+.saga-volum-fila--llegit .saga-volum-icona        { color: var(--green); }
+.saga-volum-fila--registrat .saga-volum-icona     { color: #5aa0ff; }
+.saga-volum-fila--disponible .saga-volum-icona    { color: var(--orange); }
+.saga-volum-fila--disponible .saga-volum-titol    { color: var(--text-hi); }
+.saga-volum-fila--no-disponible .saga-volum-icona { color: var(--text-lo); }
+.saga-volum-fila--no-disponible { color: var(--text-lo); }
 .saga-volum-titol { flex: 1; }
 .saga-volum-buit { font-size: 12.5px; color: var(--text-lo); font-style: italic; }
-.saga-volum-compra {
-  flex: 0 0 auto; font-size: 10px; font-weight: 700;
-  padding: 2px 8px; border-radius: 20px; white-space: nowrap;
-}
-.saga-volum-compra--comprat          { background: rgba(61,220,132,0.15); color: var(--green); }
-.saga-volum-compra--pendent          { background: var(--orange-dim); color: var(--orange); }
-.saga-volum-compra--transit          { background: rgba(90,160,255,0.15); color: #5aa0ff; }
-.saga-volum-compra--cancellat        { background: rgba(255,90,90,0.12); color: #ff6b6b; }
-.saga-volum-compra--sense-planificar { background: var(--bg-deep); color: var(--text-lo); }
 
 /* ── TBR ────────────────────────────────────────────────────────────── */
 .card-tbr {

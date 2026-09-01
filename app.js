@@ -1637,13 +1637,17 @@ function renderSagues() {
   });
 }
 
-const ESTAT_COMPRA_LABELS = {
-  comprat:            { txt: 'Comprat',       classe: 'comprat' },
-  pendent:            { txt: 'Pendent',       classe: 'pendent' },
-  transit:            { txt: 'En trànsit',    classe: 'transit' },
-  cancellat:          { txt: 'Cancel·lat',    classe: 'cancellat' },
-  sense_planificar:   { txt: 'Sense planificar', classe: 'sense-planificar' },
-};
+// Estat visual d'un volum dins l'accordion de sagues (mòbil). Prioritat:
+// llegit > registrat (el tens, encara no llegit) > disponible (publicat
+// però no el tens -- encara no comprat) > no disponible (ni publicat).
+// La icona per si sola ja diu prou: no cal cap etiqueta de text a més a
+// més per als casos sense res a dir (p.ex. "sense planificar").
+function _estatVolumIcona(v) {
+  if (v.llegit)     return { icon: 'check',     classe: 'llegit' };
+  if (v.registrat)  return { icon: 'llibre',    classe: 'registrat' };
+  if (v.publicat)   return { icon: 'carret',    classe: 'disponible' };
+  return                 { icon: 'rellotge',  classe: 'no-disponible' };
+}
 
 function renderCardSaga(s) {
   const total = s.total_previst;
@@ -1657,12 +1661,11 @@ function renderCardSaga(s) {
   const volumsHtml = expandida ? `
     <div class="saga-volums">
       ${volums.length ? volums.map(v => {
-        const ec = ESTAT_COMPRA_LABELS[v.estat_compra] || ESTAT_COMPRA_LABELS.sense_planificar;
+        const st = _estatVolumIcona(v);
         return `
-        <div class="saga-volum-fila${v.llegit ? ' llegit' : ''}">
-          <span class="saga-volum-estat">${v.llegit ? icona('check', 12) : (v.registrat ? '○' : '—')}</span>
+        <div class="saga-volum-fila saga-volum-fila--${st.classe}">
+          <span class="saga-volum-icona">${icona(st.icon, 26)}</span>
           <span class="saga-volum-titol">${escapeHtml(v.titol || '(sense títol)')}</span>
-          <span class="saga-volum-compra saga-volum-compra--${ec.classe}">${ec.txt}</span>
         </div>`;
       }).join('') : `<div class="saga-volum-buit">Encara no hi ha volums donats d'alta.</div>`}
     </div>` : '';
