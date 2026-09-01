@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -2546,7 +2546,7 @@ let fotoFlow = null;
 let _fotoDragOrigin = null;
 
 function obrirFluxFoto() {
-  fotoFlow = { pas: 'cercar', llibreId: null, llibreTitol: '', tipus: null };
+  fotoFlow = { pas: 'cercar', llibreId: null, llibreTitol: '', tipus: null, assignats: new Set() };
   document.getElementById('modal-foto-llibre').classList.remove('oculta');
   fotoAnarPas('cercar');
   const input = document.getElementById('foto-cerca-input');
@@ -2626,9 +2626,12 @@ function fotoRenderPasTipus() {
   document.getElementById('foto-llibre-sel').innerHTML =
     `${icona('llibre', 16)} <b>${escapeHtml(fotoFlow.llibreTitol)}</b>`;
   const cont = document.getElementById('foto-tipus-graella');
-  cont.innerHTML = TIPUS_IMATGE_LLIBRE.map(t => `
-    <button class="foto-tipus-btn" data-tipus="${t.key}">${escapeHtml(t.label)}</button>
-  `).join('');
+  cont.innerHTML = TIPUS_IMATGE_LLIBRE.map(t => {
+    const fet = fotoFlow.assignats && fotoFlow.assignats.has(t.key);
+    return `<button class="foto-tipus-btn${fet ? ' fet' : ''}" data-tipus="${t.key}">
+        ${fet ? icona('check', 15) + ' ' : ''}${escapeHtml(t.label)}
+      </button>`;
+  }).join('');
   cont.querySelectorAll('.foto-tipus-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (!fotoFlow) return;
@@ -2660,80 +2663,118 @@ function onFotoFitxerSeleccionat(ev) {
   reader.readAsDataURL(file);
 }
 
+const MIDA_MIN_RETALL = 30; // px mínims perquè el retall no col·lapsi a zero
+
 function fotoIniciarRetall(imgNatW, imgNatH) {
   if (!fotoFlow) return;
-  const viewport = document.getElementById('crop-viewport');
-  const rect = viewport.getBoundingClientRect();
+  const wrapper = document.getElementById('crop-wrapper');
+  const maxRect = wrapper.getBoundingClientRect();
+  // "Contain fit": es veu la imatge SENCERA (mai es retalla en mostrar-la);
+  // el que decideix què es guarda és el rectangle de retall, no el viewport.
+  const scale = Math.min(maxRect.width / imgNatW, maxRect.height / imgNatH);
+  const dispW = imgNatW * scale, dispH = imgNatH * scale;
   fotoFlow.imgNatW = imgNatW;
   fotoFlow.imgNatH = imgNatH;
-  fotoFlow.viewportW = rect.width;
-  fotoFlow.viewportH = rect.height;
-  // "Cover fit": la imatge sempre cobreix tot el viewport (mai marges buits),
-  // l'usuari només pot allunyar-se fins al punt de cobrir-lo just.
-  fotoFlow.baseScale = Math.max(fotoFlow.viewportW / imgNatW, fotoFlow.viewportH / imgNatH);
-  fotoFlow.scale = fotoFlow.baseScale;
-  fotoFlow.tx = (fotoFlow.viewportW - imgNatW * fotoFlow.scale) / 2;
-  fotoFlow.ty = (fotoFlow.viewportH - imgNatH * fotoFlow.scale) / 2;
-  document.getElementById('crop-zoom').value = 100;
-  fotoActualitzarTransform();
+  fotoFlow.scale = scale;
+  fotoFlow.dispW = dispW;
+  fotoFlow.dispH = dispH;
+
+  const viewport = document.getElementById('crop-viewport');
+  viewport.style.width = dispW + 'px';
+  viewport.style.height = dispH + 'px';
+
+  // Rectangle inicial: només un punt de partida (aspect suggerit pel
+  // tipus, centrat, ~85% del costat més curt) -- l'usuari el pot deformar
+  // lliurement amb les 4 nanses, sense mantenir cap proporció.
+  const tipusInfo = TIPUS_IMATGE_LLIBRE.find(t => t.key === fotoFlow.tipus) || TIPUS_IMATGE_LLIBRE[0];
+  let w, h;
+  if (tipusInfo.ar <= 1) { h = dispH * 0.85; w = h * tipusInfo.ar; }
+  else { w = dispW * 0.85; h = w / tipusInfo.ar; }
+  w = Math.min(w, dispW);
+  h = Math.min(h, dispH);
+  fotoFlow.rect = { x: (dispW - w) / 2, y: (dispH - h) / 2, w, h };
+
+  fotoActualitzarRect();
 }
 
-function fotoClampTxTy() {
-  const dispW = fotoFlow.imgNatW * fotoFlow.scale;
-  const dispH = fotoFlow.imgNatH * fotoFlow.scale;
-  const minTx = Math.min(0, fotoFlow.viewportW - dispW);
-  const minTy = Math.min(0, fotoFlow.viewportH - dispH);
-  fotoFlow.tx = Math.max(minTx, Math.min(0, fotoFlow.tx));
-  fotoFlow.ty = Math.max(minTy, Math.min(0, fotoFlow.ty));
+function fotoActualitzarRect() {
+  const el = document.getElementById('crop-rect');
+  if (!el || !fotoFlow || !fotoFlow.rect) return;
+  const r = fotoFlow.rect;
+  el.style.left = r.x + 'px';
+  el.style.top = r.y + 'px';
+  el.style.width = r.w + 'px';
+  el.style.height = r.h + 'px';
 }
 
-function fotoActualitzarTransform() {
-  const img = document.getElementById('crop-img');
-  if (!img || !fotoFlow) return;
-  img.style.width = (fotoFlow.imgNatW * fotoFlow.scale) + 'px';
-  img.style.height = (fotoFlow.imgNatH * fotoFlow.scale) + 'px';
-  img.style.left = fotoFlow.tx + 'px';
-  img.style.top = fotoFlow.ty + 'px';
-}
-
-function fotoViewportPointerDown(ev) {
-  if (!fotoFlow) return;
+// Arrossegar el cos del rectangle: mou el retall sencer sense canviar-ne
+// la mida.
+function fotoRectPointerDown(ev) {
+  if (!fotoFlow || !fotoFlow.rect) return;
   ev.preventDefault();
-  _fotoDragOrigin = { x: ev.clientX, y: ev.clientY, tx: fotoFlow.tx, ty: fotoFlow.ty };
-  try { ev.target.setPointerCapture(ev.pointerId); } catch (e) { /* ignorable */ }
+  ev.stopPropagation();
+  _fotoDragOrigin = { mode: 'moure', x: ev.clientX, y: ev.clientY, rect: { ...fotoFlow.rect } };
+  try { ev.currentTarget.setPointerCapture(ev.pointerId); } catch (e) { /* ignorable */ }
 }
-function fotoViewportPointerMove(ev) {
-  if (!_fotoDragOrigin || !fotoFlow) return;
+
+// Arrossegar una cantonada: mou NOMÉS aquell vèrtex, deixant fix el vèrtex
+// oposat -- deformació lliure/no proporcional, tal com es vol.
+function fotoHandlePointerDown(ev) {
+  if (!fotoFlow || !fotoFlow.rect) return;
   ev.preventDefault();
-  fotoFlow.tx = _fotoDragOrigin.tx + (ev.clientX - _fotoDragOrigin.x);
-  fotoFlow.ty = _fotoDragOrigin.ty + (ev.clientY - _fotoDragOrigin.y);
-  fotoClampTxTy();
-  fotoActualitzarTransform();
+  ev.stopPropagation();
+  _fotoDragOrigin = {
+    mode: 'redimensionar',
+    handle: ev.currentTarget.getAttribute('data-handle'),
+    x: ev.clientX, y: ev.clientY,
+    rect: { ...fotoFlow.rect },
+  };
+  try { ev.currentTarget.setPointerCapture(ev.pointerId); } catch (e) { /* ignorable */ }
 }
-function fotoViewportPointerUp() {
+
+function fotoDragPointerMove(ev) {
+  if (!_fotoDragOrigin || !fotoFlow || !fotoFlow.dispW) return;
+  ev.preventDefault();
+  const dx = ev.clientX - _fotoDragOrigin.x;
+  const dy = ev.clientY - _fotoDragOrigin.y;
+  const orig = _fotoDragOrigin.rect;
+  const dispW = fotoFlow.dispW, dispH = fotoFlow.dispH;
+
+  if (_fotoDragOrigin.mode === 'moure') {
+    let x = Math.max(0, Math.min(dispW - orig.w, orig.x + dx));
+    let y = Math.max(0, Math.min(dispH - orig.h, orig.y + dy));
+    fotoFlow.rect = { x, y, w: orig.w, h: orig.h };
+  } else {
+    const handle = _fotoDragOrigin.handle;
+    const esOest = handle.includes('w'), esNord = handle.includes('n');
+    const oppX = esOest ? orig.x + orig.w : orig.x;
+    const oppY = esNord ? orig.y + orig.h : orig.y;
+    let nx = Math.max(0, Math.min(dispW, esOest ? orig.x + dx : orig.x + orig.w + dx));
+    let ny = Math.max(0, Math.min(dispH, esNord ? orig.y + dy : orig.y + orig.h + dy));
+
+    let x, w, y, h;
+    if (esOest) { x = Math.min(nx, oppX - MIDA_MIN_RETALL); w = oppX - x; }
+    else { w = Math.max(MIDA_MIN_RETALL, nx - oppX); x = oppX; }
+    if (esNord) { y = Math.min(ny, oppY - MIDA_MIN_RETALL); h = oppY - y; }
+    else { h = Math.max(MIDA_MIN_RETALL, ny - oppY); y = oppY; }
+
+    fotoFlow.rect = {
+      x: Math.max(0, Math.min(dispW - w, x)),
+      y: Math.max(0, Math.min(dispH - h, y)),
+      w, h,
+    };
+  }
+  fotoActualitzarRect();
+}
+
+function fotoDragPointerUp() {
   _fotoDragOrigin = null;
-}
-
-function fotoZoomCanviat(ev) {
-  if (!fotoFlow) return;
-  const factor = parseInt(ev.target.value, 10) / 100;
-  const novaScale = fotoFlow.baseScale * factor;
-  // Mantenir fix el centre del viewport en fer zoom, perquè la imatge no
-  // "salti" en canviar l'escala.
-  const cx = fotoFlow.viewportW / 2, cy = fotoFlow.viewportH / 2;
-  const imgX = (cx - fotoFlow.tx) / fotoFlow.scale;
-  const imgY = (cy - fotoFlow.ty) / fotoFlow.scale;
-  fotoFlow.scale = novaScale;
-  fotoFlow.tx = cx - imgX * novaScale;
-  fotoFlow.ty = cy - imgY * novaScale;
-  fotoClampTxTy();
-  fotoActualitzarTransform();
 }
 
 function fotoSortidaDims(ar) {
   // Costat llarg fix a 1400px, l'altre costat es deriva de l'aspect ratio
-  // del tipus -- prou resolució per a una foto de llibre sense disparar
-  // el pes del fitxer (i per tant el JSON que es puja a GitHub).
+  // REAL del retall que ha fet l'usuari (no forçat al del tipus) -- prou
+  // resolució per a una foto de llibre sense disparar el pes del fitxer.
   if (ar <= 1) {
     const h = 1400;
     return { w: Math.round(h * ar), h };
@@ -2743,13 +2784,13 @@ function fotoSortidaDims(ar) {
 }
 
 function fotoConfirmar() {
-  if (!fotoFlow) return;
-  const tipusInfo = TIPUS_IMATGE_LLIBRE.find(t => t.key === fotoFlow.tipus) || TIPUS_IMATGE_LLIBRE[0];
-  const outDims = fotoSortidaDims(tipusInfo.ar);
-  const sx = -fotoFlow.tx / fotoFlow.scale;
-  const sy = -fotoFlow.ty / fotoFlow.scale;
-  const sw = fotoFlow.viewportW / fotoFlow.scale;
-  const sh = fotoFlow.viewportH / fotoFlow.scale;
+  if (!fotoFlow || !fotoFlow.rect) return;
+  const r = fotoFlow.rect;
+  const sx = r.x / fotoFlow.scale;
+  const sy = r.y / fotoFlow.scale;
+  const sw = r.w / fotoFlow.scale;
+  const sh = r.h / fotoFlow.scale;
+  const outDims = fotoSortidaDims(r.w / r.h);
 
   const canvas = document.createElement('canvas');
   canvas.width = outDims.w; canvas.height = outDims.h;
@@ -2763,6 +2804,7 @@ function fotoConfirmar() {
     return;
   }
 
+  const tipusInfo = TIPUS_IMATGE_LLIBRE.find(t => t.key === fotoFlow.tipus) || TIPUS_IMATGE_LLIBRE[0];
   const pendent = {
     client_id: 'foto_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
     llibre_id: fotoFlow.llibreId,
@@ -2773,9 +2815,15 @@ function fotoConfirmar() {
     contingut_base64: base64,
   };
   afegirFotoNovaPendent(pendent);
-  mostrarToast('Foto desada — s\'enviarà a l\'escriptori en sincronitzar.');
-  tancarFluxFoto();
+  fotoFlow.assignats.add(fotoFlow.tipus);
+  mostrarToast(`✓ ${tipusInfo.label} desada. Tria un altre angle o tanca quan acabis.`);
   enviarFotosNovesPendents(); // best-effort, no bloqueja
+
+  // A diferència d'abans, NO tanquem el flux: es torna al pas de tipus
+  // amb el mateix llibre seleccionat, perquè el normal és encadenar totes
+  // les fotos (coberta, contracoberta, llom, prestatgeria...) d'un cop.
+  fotoRenderPasTipus();
+  fotoAnarPas('tipus');
 }
 
 function obtenirFotosNovesPendents() {
@@ -2900,13 +2948,13 @@ function init() {
     document.getElementById('input-foto-llibre').click();
   });
   document.getElementById('btn-foto-confirmar').addEventListener('click', fotoConfirmar);
-  document.getElementById('crop-zoom').addEventListener('input', fotoZoomCanviat);
-  const cropViewport = document.getElementById('crop-viewport');
-  cropViewport.addEventListener('pointerdown', fotoViewportPointerDown);
-  cropViewport.addEventListener('pointermove', fotoViewportPointerMove);
-  cropViewport.addEventListener('pointerup', fotoViewportPointerUp);
-  cropViewport.addEventListener('pointercancel', fotoViewportPointerUp);
-  cropViewport.addEventListener('pointerleave', fotoViewportPointerUp);
+  document.getElementById('crop-rect').addEventListener('pointerdown', fotoRectPointerDown);
+  document.querySelectorAll('.crop-handle').forEach(h => {
+    h.addEventListener('pointerdown', fotoHandlePointerDown);
+  });
+  document.addEventListener('pointermove', fotoDragPointerMove);
+  document.addEventListener('pointerup', fotoDragPointerUp);
+  document.addEventListener('pointercancel', fotoDragPointerUp);
 
   render();
 

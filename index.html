@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=188">
+<link rel="stylesheet" href="styles.css?v=190">
 </head>
 <body>
 <div id="app">
@@ -75,10 +75,18 @@
       </div>
 
       <div class="foto-pas oculta" id="foto-pas-retall">
-        <div class="crop-viewport" id="crop-viewport">
-          <img id="crop-img" draggable="false" alt="">
+        <div class="crop-wrapper" id="crop-wrapper">
+          <div class="crop-viewport" id="crop-viewport">
+            <img id="crop-img" draggable="false" alt="">
+            <div class="crop-rect" id="crop-rect">
+              <div class="crop-handle crop-handle--nw" data-handle="nw"></div>
+              <div class="crop-handle crop-handle--ne" data-handle="ne"></div>
+              <div class="crop-handle crop-handle--sw" data-handle="sw"></div>
+              <div class="crop-handle crop-handle--se" data-handle="se"></div>
+            </div>
+          </div>
         </div>
-        <input type="range" id="crop-zoom" min="100" max="400" value="100">
+        <div class="foto-retall-hint">Arrossega les cantonades per ajustar el retall (no cal mantenir proporcions) o el centre per moure'l.</div>
         <div class="foto-retall-accions">
           <button class="btn-secundari" id="btn-foto-repetir">Repetir foto</button>
           <button class="btn-marcar" id="btn-foto-confirmar">Fer servir aquesta foto</button>
@@ -100,6 +108,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="app.js?v=188"></script>
+<script src="app.js?v=190"></script>
 </body>
 </html>
