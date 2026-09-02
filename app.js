@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '1.10.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -291,14 +291,14 @@ async function pujarPomodorosAra() {
   }
   const pendents = obtenirPomodorosPendents();
   if (!pendents.length) {
-    mostrarToast('No hi ha cap pomodoro pendent de pujar.');
+    mostrarToast('No hi ha cap focus pendent de pujar.');
     return;
   }
-  mostrarToast(`Pujant ${pendents.length} pomodoro(s)...`);
+  mostrarToast(`Pujant ${pendents.length} focus...`);
   const resultat = await enviarPomodorosPendents();
   const encaraPendents = obtenirPomodorosPendents().length;
   if (!encaraPendents) {
-    mostrarToast(`✓ ${pendents.length} pomodoro(s) pujats a GitHub.`);
+    mostrarToast(`✓ ${pendents.length} focus pujats a GitHub.`);
   } else {
     const motiu = (resultat && resultat.motiu) ? resultat.motiu : 'motiu desconegut';
     mostrarToast(`No s'ha pogut pujar: ${motiu} -- es reintentarà.`);
@@ -314,11 +314,11 @@ function configurarPomodoro(onDesat) {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-caixa modal-config-caixa">
-      <div class="modal-titol">Configuració del Pomodoro</div>
+      <div class="modal-titol">Configuració del Focus</div>
 
       <div class="config-seccio">Durades (minuts)</div>
       <div class="config-fila">
-        <label for="cfg-treball">Treball</label>
+        <label for="cfg-treball">Focus</label>
         <input type="number" id="cfg-treball" min="1" value="${Math.round(cfg.durada_treball / 60)}">
       </div>
       <div class="config-fila">
@@ -810,8 +810,8 @@ function formatTemps(segons) {
 function pomoIniciar() {
   if (!pomo.enCurs && pomo.tipus === 'treball' && !pomo.llibreId) {
     mostrarConfirmacio(
-      'Pomodoro sense llibre',
-      'No has triat cap llibre. Vols fer aquest pomodoro sense llibre assignat?',
+      'Focus sense llibre',
+      'No has triat cap llibre. Vols fer aquest focus sense llibre assignat?',
       'Sí, sense llibre', 'No, vull triar-ne un',
       () => pomoIniciarConfirmat());
     return;
@@ -945,7 +945,7 @@ function pomoCheckpointFinalOAmpliar() {
   if (cfg.so_activat) reproduirBeep(cfg.so_durada);
   const minutsFets = Math.round(pomo.total / 60);
   mostrarConfirmacio(
-    'Pomodoro complet ✓',
+    'Focus complet ✓',
     `Han passat ${minutsFets} min. Vols ampliar 25 min més o finalitzar?`,
     '+ Ampliar 25 min', 'Finalitzar',
     () => pomoAmpliar(),   // "Sí" -> ampliar i tornar a engegar el compte enrere
@@ -1021,7 +1021,7 @@ function mostrarModalPaginaFinal(anticipat = false) {
   overlay.id = 'modal-pagina-final';
   overlay.innerHTML = `
     <div class="modal-caixa modal-pagina-final-caixa">
-      <div class="modal-titol">${anticipat ? 'Finalitzar pomodoro ara' : 'Pàgina final'}</div>
+      <div class="modal-titol">${anticipat ? 'Finalitzar focus ara' : 'Pàgina final'}</div>
       <div class="modal-linia discreta">${escapeHtml(pomo.llibreTitol || '')} · inici: ${inicial}</div>
       <div class="pagina-final-stepper">
         <button type="button" class="pagina-final-btn" id="pf-menys" aria-label="Una pàgina menys">−</button>
@@ -1121,6 +1121,13 @@ function _actualitzarPomodorosRestants(llibreActualitzat, paginaFinal) {
   if (nouValor === null) return;
   const esperat = typeof valorAnterior === 'number' ? Math.max(0, valorAnterior - 1) : null;
   llibreActualitzat.pomodorosAjustat = (esperat !== null) && (nouValor !== esperat);
+  // Es guarda el valor anterior tal com era ABANS d'aquest focus -- valor
+  // "residual" que es queda igual fins al proper focus (no es recalcula en
+  // cada sincronització), perquè es pugui veure el salt real que ha fet
+  // aquest focus concret (de vegades no és -1, sinó -2 o -3).
+  if (typeof valorAnterior === 'number') {
+    llibreActualitzat.pomodoros_restants_anterior = valorAnterior;
+  }
   llibreActualitzat.pomodoros_restants = nouValor;
 }
 
@@ -1165,8 +1172,8 @@ function pomoFinalitzarAnticipatConfirmar(paginaFinal, llibreAcabat) {
     esperantConfirmacio: false, tipus: 'treball',
   };
   mostrarToast(llibreAcabat
-    ? '✓ Pomodoro parcial desat i llibre marcat com a acabat.'
-    : '✓ Pomodoro parcial desat.');
+    ? '✓ Focus parcial desat i llibre marcat com a acabat.'
+    : '✓ Focus parcial desat.');
   renderPomodoro();
 }
 
@@ -1331,12 +1338,29 @@ function aplicarNovesDades(previsionsRows, extra, meta) {
   // 'extra' (sagues/tbr/reptes) només arriba via GitHub; via CSV es manté
   // el que ja hi hagués (el CSV només conté previsions).
   const actual = carregarDades();
+  let llibresEnCursNous = extra ? (extra.llibresEnCurs || []) : (actual.llibresEnCurs || []);
+  if (extra) {
+    // "pomodoros_restants_anterior" és un valor purament local (el que hi
+    // havia abans de l'últim focus fet); no ve del servidor. Es conserva
+    // en sincronitzar perquè no desaparegui fins que es faci un focus nou.
+    const anteriorsPerId = {};
+    for (const l of (actual.llibresEnCurs || [])) {
+      if (typeof l.pomodoros_restants_anterior === 'number') {
+        anteriorsPerId[l.id] = l.pomodoros_restants_anterior;
+      }
+    }
+    llibresEnCursNous = llibresEnCursNous.map(l => (
+      anteriorsPerId[l.id] !== undefined
+        ? { ...l, pomodoros_restants_anterior: anteriorsPerId[l.id] }
+        : l
+    ));
+  }
   const noves = {
     previsions: previsionsRows,
     sagues: extra ? (extra.sagues || []) : actual.sagues,
     tbr: extra ? (extra.tbr || []) : actual.tbr,
     reptes: extra ? (extra.reptes || null) : actual.reptes,
-    llibresEnCurs: extra ? (extra.llibresEnCurs || []) : (actual.llibresEnCurs || []),
+    llibresEnCurs: llibresEnCursNous,
     mesosTancats: extra ? (extra.mesosTancats || []) : (actual.mesosTancats || []),
     tagsCita: extra ? (extra.tagsCita || []) : (actual.tagsCita || []),
     catalegLlibres: extra ? (extra.catalegLlibres || []) : (actual.catalegLlibres || []),
@@ -2196,7 +2220,7 @@ function renderPomodoro() {
 
   const cfg = obtenirConfigPomodoro();
   const colorTipus = pomo.tipus === 'treball' ? 'var(--orange)' : 'var(--green)';
-  const etiquetaTipus = pomo.tipus === 'treball' ? 'Treball' : 'Descans';
+  const etiquetaTipus = pomo.tipus === 'treball' ? 'Focus' : 'Descans';
 
   const punts = [0, 1, 2, 3].map(i =>
     `<span style="display:inline-block; width:9px; height:9px; border-radius:50%; margin:0 3px;
@@ -2208,11 +2232,11 @@ function renderPomodoro() {
     contingutCentral = `
       <div class="pomo-missatge">${icona('check', 34)}</div>
       <div class="pomo-titol-fase" style="color:var(--green);">
-        ${acabatTreball ? 'Pomodoro completat!' : 'Descans acabat!'}
+        ${acabatTreball ? 'Focus completat!' : 'Descans acabat!'}
       </div>
       <div class="pomo-btns-confirm">
         <button class="btn-primari" id="pomo-continuar">
-          ${acabatTreball ? (pomo.cicleNum === 0 ? 'Iniciar descans llarg' : 'Iniciar descans') : 'Nou pomodoro'}
+          ${acabatTreball ? (pomo.cicleNum === 0 ? 'Iniciar descans llarg' : 'Iniciar descans') : 'Nou focus'}
         </button>
         <button class="btn-marcar" id="pomo-prou">Prou per ara</button>
       </div>`;
@@ -2236,11 +2260,11 @@ function renderPomodoro() {
                       : 'Treure la selecció del llibre'}">${icona('stop', 15)}</button>
             ${(pomo.tipus === 'treball' && pomo.enCurs) ? `
               <button class="pomo-btn-mitja pomo-btn-ampliar" id="pomo-ampliar"
-                      title="Ampliar aquest pomodoro 25 min més (un sol registre)">${icona('ampliar', 15)}</button>
+                      title="Ampliar aquest focus 25 min més (un sol registre)">${icona('ampliar', 15)}</button>
             ` : ''}
             ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
               <button class="pomo-btn-mitja pomo-btn-finalitzar" id="pomo-finalitzar"
-                      title="Finalitzar aquest pomodoro ara (parcial)">${icona('bandera', 14)}</button>
+                      title="Finalitzar aquest focus ara (parcial)">${icona('bandera', 14)}</button>
             ` : ''}
           </div>
         </div>
@@ -2264,21 +2288,30 @@ function renderPomodoro() {
     // pròpia del llibre).
     const esGrup = !!llibreSeleccionat.pomodoros_estimacio_grup;
     projeccioHtml = `<div class="pomo-projeccio${ajustat ? ' ajustat' : ''}${esGrup ? ' estimacio-grup' : ''}">
-        ~${llibreSeleccionat.pomodoros_restants} pomodoros per acabar${ajustat ? ' (ajustat)' : ''}${esGrup ? ' *' : ''}
+        ~${llibreSeleccionat.pomodoros_restants} focus per acabar${ajustat ? ' (ajustat)' : ''}${esGrup ? ' *' : ''}
       </div>`;
   }
 
+  const cobertaHtml = (llibreSeleccionat && llibreSeleccionat.coberta_base64)
+    ? `<img class="pomo-llibre-coberta" src="data:image/jpeg;base64,${llibreSeleccionat.coberta_base64}" alt="">`
+    : '';
+
   const llibreActualHtml = pomo.llibreId
-    ? `<div class="pomo-llibre-pag-fila">
-         ${icona('llibre', 14)}
-         <span class="titol">${escapeHtml(pomo.llibreTitol)}</span>
-         <label class="sep" for="pomo-pagina-inicial">· pàg.</label>
-         <input type="number" id="pomo-pagina-inicial" min="0"
-                value="${paginaMostrada}" ${pomo.enCurs ? 'disabled' : ''}>
-         <button type="button" id="pomo-pagina-inicial-mes" aria-label="Sumar una pàgina"
-                 ${pomo.enCurs ? 'disabled' : ''}>+</button>
-       </div>
-       ${projeccioHtml}`
+    ? `<div class="pomo-llibre-fixa">
+         ${cobertaHtml}
+         <div class="pomo-llibre-fixa-dreta">
+           <div class="pomo-llibre-pag-fila">
+             ${icona('llibre', 14)}
+             <span class="titol">${escapeHtml(pomo.llibreTitol)}</span>
+             <label class="sep" for="pomo-pagina-inicial">· pàg.</label>
+             <input type="number" id="pomo-pagina-inicial" min="0"
+                    value="${paginaMostrada}" ${pomo.enCurs ? 'disabled' : ''}>
+             <button type="button" id="pomo-pagina-inicial-mes" aria-label="Sumar una pàgina"
+                     ${pomo.enCurs ? 'disabled' : ''}>+</button>
+           </div>
+           ${projeccioHtml}
+         </div>
+       </div>`
     : '';
 
   let seccioLlibres = '';
@@ -2299,6 +2332,8 @@ function renderPomodoro() {
       const seleccionat = l.id === pomo.llibreId;
       const pct = l.pagines ? Math.min(100, Math.round((l.pagina_actual / l.pagines) * 100)) : null;
       const teRestants = typeof l.pomodoros_restants === 'number';
+      const teAnterior = typeof l.pomodoros_restants_anterior === 'number' &&
+                          l.pomodoros_restants_anterior !== l.pomodoros_restants;
       const esGrup = !!l.pomodoros_estimacio_grup;
       return `
         <button class="card-llibre-pomo${seleccionat ? ' seleccionat' : ''}"
@@ -2307,12 +2342,19 @@ function renderPomodoro() {
             <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
             ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
             <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
-            ${l.pag_per_pomodoro ? `<div class="card-llibre-pomo-proj">≈${l.pag_per_pomodoro} pàg/pom${esGrup ? ' *' : ''}</div>` : ''}
+            <div class="card-llibre-pomo-linia2">
+              ${l.pag_per_pomodoro ? `<span class="card-llibre-pomo-proj">≈${l.pag_per_pomodoro} pàg/focus${esGrup ? ' *' : ''}</span>` : ''}
+              ${l.data_fi_estimada ? `<span class="card-llibre-pomo-fi">Fi prevista: ${formatData(l.data_fi_estimada)}</span>` : ''}
+            </div>
           </div>
           ${teRestants ? `
-          <div class="card-llibre-pomo-restants${esGrup ? ' estimacio-grup' : ''}" title="${esGrup ? 'Estimació aproximada (encara sense pomodoros propis d\u2019aquest llibre)' : 'Pomodoros estimats per acabar el llibre'}">
+          <div class="card-llibre-pomo-restants${esGrup ? ' estimacio-grup' : ''}" title="${esGrup ? 'Estimació aproximada (encara sense focus propis d\u2019aquest llibre)' : 'Focus estimats per acabar el llibre'}">
             <span class="card-llibre-pomo-restants-num">${l.pomodoros_restants}${esGrup ? '*' : ''}</span>
-            <span class="card-llibre-pomo-restants-lbl">pom.</span>
+            <span class="card-llibre-pomo-restants-lbl">focus</span>
+            ${teAnterior ? `
+            <div class="card-llibre-pomo-restants-sep"></div>
+            <span class="card-llibre-pomo-restants-ant" title="El que hi havia abans de l'últim focus fet">${l.pomodoros_restants_anterior}</span>
+            <span class="card-llibre-pomo-restants-ant-lbl">abans</span>` : ''}
           </div>` : ''}
         </button>`;
     }).join('');
@@ -2334,12 +2376,12 @@ function renderPomodoro() {
     <div class="pomo-vista" id="pomo-vista">
       <div class="pomo-top-fix">
         <div class="pomo-header">
-          <div class="pomo-header-titol">Pomodoro
+          <div class="pomo-header-titol">Focus
             <span class="pomo-comptador-avui">${obtenirComptadorAvui()} avui</span>
           </div>
           <div style="display:flex; gap:8px;">
-            <button class="btn-icon" id="pomo-btn-pujar" title="Pujar pomodoros pendents ara">${icona('pujar', 18)}</button>
-            <button class="btn-icon" id="pomo-btn-config" title="Configuració del Pomodoro">${icona('config', 18)}</button>
+            <button class="btn-icon" id="pomo-btn-pujar" title="Pujar focus pendents ara">${icona('pujar', 18)}</button>
+            <button class="btn-icon" id="pomo-btn-config" title="Configuració del Focus">${icona('config', 18)}</button>
           </div>
         </div>
         <div class="pomo-caixa">
@@ -2443,7 +2485,7 @@ function injectarIconesFixes() {
   document.getElementById('nav-tbr').innerHTML = icona('piles', 20) + '<span>TBR</span>';
   document.getElementById('nav-reptes').innerHTML = icona('diana', 20) + '<span>Reptes</span>';
   document.getElementById('nav-cites').innerHTML = icona('cita', 20) + '<span>Cites</span>';
-  document.getElementById('nav-pomodoro').innerHTML = icona('rellotge', 20) + '<span>Pomodoro</span>';
+  document.getElementById('nav-pomodoro').innerHTML = icona('rellotge', 20) + '<span>Focus</span>';
 
   document.getElementById('opcio-github').addEventListener('click', (ev) => {
     ev.stopPropagation();
@@ -2616,6 +2658,10 @@ function fotoRenderResultatsCerca(query) {
       if (!llibre || !fotoFlow) return;
       fotoFlow.llibreId = llibre.id;
       fotoFlow.llibreTitol = llibre.titol;
+      // Tipus que ja tenen foto AL SERVIDOR (vinguda d'una sincronització
+      // anterior) -- diferent de fotoFlow.assignats, que és el que s'ha
+      // fet només en aquesta mateixa sessió d'aquest flux.
+      fotoFlow.existents = new Set(llibre.imatges || []);
       fotoRenderPasTipus();
       fotoAnarPas('tipus');
     });
@@ -2627,15 +2673,30 @@ function fotoRenderPasTipus() {
     `${icona('llibre', 16)} <b>${escapeHtml(fotoFlow.llibreTitol)}</b>`;
   const cont = document.getElementById('foto-tipus-graella');
   cont.innerHTML = TIPUS_IMATGE_LLIBRE.map(t => {
-    const fet = fotoFlow.assignats && fotoFlow.assignats.has(t.key);
-    return `<button class="foto-tipus-btn${fet ? ' fet' : ''}" data-tipus="${t.key}">
-        ${fet ? icona('check', 15) + ' ' : ''}${escapeHtml(t.label)}
+    const fetAra = fotoFlow.assignats && fotoFlow.assignats.has(t.key);
+    const jaExistia = !fetAra && fotoFlow.existents && fotoFlow.existents.has(t.key);
+    let classe = '', etiqueta = '';
+    if (fetAra) { classe = ' fet'; etiqueta = icona('check', 15) + ' '; }
+    else if (jaExistia) { classe = ' ja-existent'; etiqueta = icona('camera', 13) + ' '; }
+    return `<button class="foto-tipus-btn${classe}" data-tipus="${t.key}">
+        ${etiqueta}${escapeHtml(t.label)}
+        ${jaExistia ? '<span class="foto-tipus-sub">Ja en tens — es substituirà</span>' : ''}
       </button>`;
   }).join('');
   cont.querySelectorAll('.foto-tipus-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (!fotoFlow) return;
-      fotoFlow.tipus = btn.getAttribute('data-tipus');
+      const tk = btn.getAttribute('data-tipus');
+      const teFotoJa = (fotoFlow.assignats && fotoFlow.assignats.has(tk)) ||
+                        (fotoFlow.existents && fotoFlow.existents.has(tk));
+      const tipusInfo = TIPUS_IMATGE_LLIBRE.find(t => t.key === tk);
+      if (teFotoJa && !confirm(
+        `Ja tens una foto de "${tipusInfo.label}" per aquest llibre. ` +
+        `Si en fas una de nova, SUBSTITUIRÀ l'actual. Vols continuar?`
+      )) {
+        return;
+      }
+      fotoFlow.tipus = tk;
       document.getElementById('input-foto-llibre').click();
     });
   });
@@ -2859,7 +2920,21 @@ function afegirFotoNovaPendent(foto) {
   }
 }
 
+let _fotosEnviamentEnCurs = Promise.resolve();
+
+// Punt d'entrada públic: encadena les crides SEQÜENCIALMENT. Si es crida
+// una altra vegada mentre ja n'hi ha una en curs (molt habitual quan fas
+// diverses fotos seguides, ja que cada confirmació en dispara una), s'
+// espera que la primera acabi abans de començar la segona -- si dues
+// pujades corrien a la vegada, la que acabava després podia esborrar tota
+// la cua local encara que l'altra no hagués arribat a pujar-se bé.
 async function enviarFotosNovesPendents() {
+  const tasca = _fotosEnviamentEnCurs.then(() => _enviarFotosNovesPendentsInterna());
+  _fotosEnviamentEnCurs = tasca.catch(() => {}); // no encallar la cadena si una pujada falla
+  return tasca;
+}
+
+async function _enviarFotosNovesPendentsInterna() {
   const pendents = obtenirFotosNovesPendents();
   if (!pendents.length) return { ok: true };
   const token = localStorage.getItem(GITHUB_TOKEN_KEY);
@@ -2902,7 +2977,18 @@ async function enviarFotosNovesPendents() {
       body: JSON.stringify(body),
     });
     if (putResp.ok) {
-      localStorage.removeItem(FOTOS_NOVES_KEY);
+      // Esborrar de la cua local NOMÉS les entrades que s'acaben de pujar
+      // (per client_id) -- no la cua sencera. Si mentre es feia aquesta
+      // pujada (crida de xarxa, triga un moment) s'ha afegit una foto nova
+      // a la cua, aquesta última NO s'ha de perdre.
+      const idsEnviats = new Set(pendents.map(f => f.client_id));
+      const actuals = obtenirFotosNovesPendents();
+      const restants = actuals.filter(f => !idsEnviats.has(f.client_id));
+      if (restants.length) {
+        localStorage.setItem(FOTOS_NOVES_KEY, JSON.stringify(restants));
+      } else {
+        localStorage.removeItem(FOTOS_NOVES_KEY);
+      }
       return { ok: true };
     }
     let detall = '';
