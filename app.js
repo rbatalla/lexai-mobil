@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.10.1';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -60,6 +60,27 @@ const CITES_NOVES_PATH = 'data/lexai_mobil_cites_noves.json';
 const CITES_NOVES_KEY = 'lexaiMobil_cites_noves_v1';
 const FOTOS_NOVES_PATH = 'data/lexai_mobil_imatges_noves.json';
 const FOTOS_NOVES_KEY = 'lexaiMobil_fotos_noves_v1';
+// Registre PERSISTENT (mai s'esborra en pujar-se) de quins tipus de foto
+// ja s'han fet des d'aquest mòbil per a cada llibre -- independent de la
+// cua de pujada pendent (FOTOS_NOVES_KEY), que SÍ es buida un cop pujada
+// amb èxit. Sense això, "ja en tens una" desapareixia just després de
+// pujar-se bé (abans que l'escriptori la importés i el catàleg tornés a
+// baixar amb la informació actualitzada).
+const FOTOS_FETES_LOCAL_KEY = 'lexaiMobil_fotos_fetes_local_v1';
+
+function obtenirFotosFetesLocal() {
+  try {
+    const raw = localStorage.getItem(FOTOS_FETES_LOCAL_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function marcarFotoFetaLocal(llibreId, tipus) {
+  const totes = obtenirFotosFetesLocal();
+  const key = String(llibreId);
+  if (!totes[key]) totes[key] = [];
+  if (!totes[key].includes(tipus)) totes[key].push(tipus);
+  try { localStorage.setItem(FOTOS_FETES_LOCAL_KEY, JSON.stringify(totes)); } catch (e) { /* ignorable */ }
+}
 // Mateixos vocabularis que TIPUS_CITA/IMPACTE_CITA a lexai/database.py —
 // canvien poc, es mantenen fixos aquí (com TBR_CATEGORIES) en lloc de
 // sincronitzar-los des de l'escriptori.
@@ -2478,6 +2499,7 @@ function injectarIconesFixes() {
   document.getElementById('btn-minimitzar').innerHTML = icona('minimitzar', 19);
   document.getElementById('btn-foto-llibre').innerHTML = icona('camera', 19);
   document.getElementById('btn-foto-tancar').innerHTML = icona('tancar', 16);
+  document.getElementById('btn-foto-pujar').innerHTML = icona('pujar', 17);
   document.getElementById('btn-mes-ant').innerHTML = icona('chevronEsquerra', 20);
   document.getElementById('btn-mes-seg').innerHTML = icona('chevronDreta', 20);
   document.getElementById('nav-previsions').innerHTML = icona('calendari', 20) + '<span>Previsions</span>';
@@ -2661,7 +2683,17 @@ function fotoRenderResultatsCerca(query) {
       // Tipus que ja tenen foto AL SERVIDOR (vinguda d'una sincronització
       // anterior) -- diferent de fotoFlow.assignats, que és el que s'ha
       // fet només en aquesta mateixa sessió d'aquest flux.
-      fotoFlow.existents = new Set(llibre.imatges || []);
+      // "existents" combina dues fonts: el catàleg (fotos ja confirmades i
+      // importades a l'escriptori) I la cua local pendent de pujar/importar
+      // (fotos ja fetes des d'aquest mateix mòbil però que encara no han
+      // arribat a l'escriptori) -- sense això, si tanques el flux i el
+      // tornes a obrir sobre el mateix llibre abans de sincronitzar, es
+      // perdia el rastre de què ja tenies fet.
+      const pendentsLocals = obtenirFotosNovesPendents()
+        .filter(p => p.llibre_id === llibre.id)
+        .map(p => p.tipus);
+      const fetesLocalPersistents = obtenirFotosFetesLocal()[String(llibre.id)] || [];
+      fotoFlow.existents = new Set([...(llibre.imatges || []), ...pendentsLocals, ...fetesLocalPersistents]);
       fotoRenderPasTipus();
       fotoAnarPas('tipus');
     });
@@ -2700,6 +2732,38 @@ function fotoRenderPasTipus() {
       document.getElementById('input-foto-llibre').click();
     });
   });
+
+  fotoActualitzarBotoPujar();
+}
+
+function fotoActualitzarBotoPujar() {
+  const btn = document.getElementById('btn-foto-pujar-ara');
+  if (!btn) return;
+  const n = obtenirFotosNovesPendents().length;
+  btn.textContent = n
+    ? `⇪ Pujar ${n} foto${n === 1 ? '' : 's'} pendent${n === 1 ? '' : 's'} a GitHub`
+    : '✓ Cap foto pendent de pujar';
+  btn.disabled = n === 0;
+  btn.classList.toggle('sense-pendents', n === 0);
+}
+
+async function fotoPujarAra() {
+  const btn = document.getElementById('btn-foto-pujar-ara');
+  const nAbans = obtenirFotosNovesPendents().length;
+  if (!nAbans) {
+    mostrarToast('No hi ha cap foto pendent de pujar.');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Pujant...'; }
+  const resultat = await enviarFotosNovesPendents();
+  const nDespres = obtenirFotosNovesPendents().length;
+  const nPujades = nAbans - nDespres;
+  if (resultat.ok) {
+    mostrarToast(`✓ ${nPujades} foto${nPujades === 1 ? '' : 's'} pujada${nPujades === 1 ? '' : 's'} a GitHub.`);
+  } else {
+    mostrarToast(`No s'ha pogut pujar (${resultat.motiu || 'error desconegut'}). Es reintentarà més tard.`);
+  }
+  fotoActualitzarBotoPujar();
 }
 
 function onFotoFitxerSeleccionat(ev) {
@@ -2849,14 +2913,17 @@ function fotoDragPointerUp() {
 }
 
 function fotoSortidaDims(ar) {
-  // Costat llarg fix a 1400px, l'altre costat es deriva de l'aspect ratio
-  // REAL del retall que ha fet l'usuari (no forçat al del tipus) -- prou
-  // resolució per a una foto de llibre sense disparar el pes del fitxer.
+  // Costat llarg fix a 1100px (abans 1400): la mida i la qualitat JPEG
+  // (0.72, abans 0.85) es baixen expressament perquè cada foto pesi molt
+  // menys en base64 -- el manifest de GitHub s'estava fent massa gran amb
+  // 3-4 fotos acumulades i provocava "handshake timeout" en baixar-lo/
+  // pujar-lo. Segueix sent resolució de sobres per veure una coberta o un
+  // llom en una pantalla.
   if (ar <= 1) {
-    const h = 1400;
+    const h = 1100;
     return { w: Math.round(h * ar), h };
   }
-  const w = 1400;
+  const w = 1100;
   return { w, h: Math.round(w / ar) };
 }
 
@@ -2874,7 +2941,7 @@ function fotoConfirmar() {
   const ctx = canvas.getContext('2d');
   const img = document.getElementById('crop-img');
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outDims.w, outDims.h);
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
   const base64 = dataUrl.split(',')[1];
   if (!base64) {
     mostrarToast('No s\'ha pogut processar la foto.');
@@ -2893,6 +2960,7 @@ function fotoConfirmar() {
   };
   afegirFotoNovaPendent(pendent);
   fotoFlow.assignats.add(fotoFlow.tipus);
+  marcarFotoFetaLocal(fotoFlow.llibreId, fotoFlow.tipus);
   mostrarToast(`✓ ${tipusInfo.label} desada. Tria un altre angle o tanca quan acabis.`);
   enviarFotosNovesPendents(); // best-effort, no bloqueja
 
@@ -2901,6 +2969,25 @@ function fotoConfirmar() {
   // les fotos (coberta, contracoberta, llom, prestatgeria...) d'un cop.
   fotoRenderPasTipus();
   fotoAnarPas('tipus');
+}
+
+async function fotoPujarAra() {
+  const pendents = obtenirFotosNovesPendents();
+  if (!pendents.length) {
+    mostrarToast('No hi ha cap foto pendent de pujar.');
+    return;
+  }
+  mostrarToast(`Pujant ${pendents.length} foto(s)...`);
+  const resultat = await enviarFotosNovesPendents();
+  const encaraPendents = obtenirFotosNovesPendents().length;
+  const pujades = pendents.length - encaraPendents;
+  if (resultat.ok && pujades > 0) {
+    mostrarToast(`✓ ${pujades} foto(s) pujada(es) a GitHub — pendents de baixar a l'escriptori.`);
+  } else if (resultat.ok) {
+    mostrarToast('No s\'ha pogut pujar cap foto nova (comprova la connexió).');
+  } else {
+    mostrarToast(`Error pujant fotos: ${resultat.motiu}`);
+  }
 }
 
 function obtenirFotosNovesPendents() {
@@ -3044,12 +3131,14 @@ function init() {
   // ── Fotos de llibre ──
   document.getElementById('btn-foto-llibre').addEventListener('click', obrirFluxFoto);
   document.getElementById('btn-foto-tancar').addEventListener('click', tancarFluxFoto);
+  document.getElementById('btn-foto-pujar').addEventListener('click', fotoPujarAra);
   document.getElementById('foto-cerca-input').addEventListener('input', (e) => fotoRenderResultatsCerca(e.target.value));
   document.getElementById('input-foto-llibre').addEventListener('change', onFotoFitxerSeleccionat);
   document.getElementById('btn-foto-repetir').addEventListener('click', () => {
     document.getElementById('input-foto-llibre').click();
   });
   document.getElementById('btn-foto-confirmar').addEventListener('click', fotoConfirmar);
+  document.getElementById('btn-foto-pujar-ara').addEventListener('click', fotoPujarAra);
   document.getElementById('crop-rect').addEventListener('pointerdown', fotoRectPointerDown);
   document.querySelectorAll('.crop-handle').forEach(h => {
     h.addEventListener('pointerdown', fotoHandlePointerDown);

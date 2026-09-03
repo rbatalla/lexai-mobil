@@ -1007,6 +1007,16 @@ main { flex: 1; padding: 14px 12px 80px; }
 .foto-tipus-btn.fet { border-color: var(--green); color: var(--green); }
 .foto-tipus-btn.ja-existent { border-color: #f0c94a; }
 .foto-tipus-sub { font-size: 10.5px; font-weight: 600; color: #f0c94a; }
+.foto-btn-pujar {
+  background: var(--bg-card); border: 1px solid var(--orange);
+  color: var(--orange); border-radius: 12px;
+  font-size: 13.5px; font-weight: 700; padding: 11px;
+  cursor: pointer; font-family: inherit;
+}
+.foto-btn-pujar:active { background: var(--orange-dim); }
+.foto-btn-pujar.sense-pendents {
+  border-color: var(--border-lt); color: var(--text-lo); cursor: default;
+}
 
 .crop-wrapper {
   width: 100%; height: 60vh;
