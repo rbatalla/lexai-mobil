@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.10.2';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -166,15 +166,17 @@ const SAGA_ESTATS = [
   { key: 'completes', label: 'Completes' },
 ];
 
-// Tipus de foto de llibre (mateixos valors que TIPUS_IMATGE a database.py).
+// Tipus de foto de llibre (mateixos valors que TIPUS_IMATGE a database.py
+// -- han de coincidir EXACTAMENT amb el CHECK constraint real de
+// llibre_imatge.tipus a schema_inicial.py).
 // 'ar' = amplada/alçada del retall (aspect ratio) més natural per a cada
-// tipus -- coberta/contracoberta són gairebé quadrades-verticals, el llom
-// és una tira molt estreta, la prestatgeria és apaïsada.
+// tipus -- portada/contracoberta són gairebé quadrades-verticals, el
+// lateral (llom) és una tira molt estreta, la ubicació és apaïsada.
 const TIPUS_IMATGE_LLIBRE = [
-  { key: 'coberta',       label: 'Coberta',                      ar: 2 / 3 },
+  { key: 'portada',       label: 'Portada',                      ar: 2 / 3 },
   { key: 'contracoberta', label: 'Contracoberta',                ar: 2 / 3 },
-  { key: 'llom',          label: 'Llom',                         ar: 1 / 4 },
-  { key: 'prestatgeria',  label: 'Posició a la prestatgeria',    ar: 4 / 3 },
+  { key: 'lateral',       label: 'Llom',                         ar: 1 / 4 },
+  { key: 'ubicacio',      label: 'Posició a la prestatgeria',    ar: 4 / 3 },
 ];
 
 // Categories de Reptes que compten per al comptador de copes (6 en total:
