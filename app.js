@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.10.2';
+const APP_VERSION = '1.11.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -35,6 +35,7 @@ const ICONES = {
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/>',
   tancar: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   fletxaEsquerra: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+  progres: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h6"/><line x1="16" y1="4" x2="22" y2="4"/><line x1="19" y1="1" x2="19" y2="7"/>',
 };
 
 function icona(nom, mida) {
@@ -58,6 +59,8 @@ const PREVISIONS_NOVES_PATH = 'data/lexai_mobil_previsions_noves.json';
 const PREVISIONS_NOVES_KEY = 'lexaiMobil_previsions_noves_v1';
 const CITES_NOVES_PATH = 'data/lexai_mobil_cites_noves.json';
 const CITES_NOVES_KEY = 'lexaiMobil_cites_noves_v1';
+const PROGRES_NOU_PATH = 'data/lexai_mobil_progres_nous.json';
+const PROGRES_NOU_KEY = 'lexaiMobil_progres_nous_v1';
 const FOTOS_NOVES_PATH = 'data/lexai_mobil_imatges_noves.json';
 const FOTOS_NOVES_KEY = 'lexaiMobil_fotos_noves_v1';
 // Registre PERSISTENT (mai s'esborra en pujar-se) de quins tipus de foto
@@ -707,6 +710,77 @@ async function enviarCitesNovesPendents() {
   }
 }
 
+// ── Progrés ràpid — pujada de progressos nous des de la targeta "Llegint"
+// (mateix patró que previsions/cites noves; NO passa per la cua de
+// pomodoros perquè no s'ha de crear cap sessió de Focus ni sortir a les
+// gràfiques — només toca progres_lectura a l'escriptori) ──────────────────
+
+function obtenirProgresNousPendents() {
+  try {
+    const raw = localStorage.getItem(PROGRES_NOU_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function afegirProgresNouPendent(progres) {
+  const pendents = obtenirProgresNousPendents();
+  pendents.push(progres);
+  localStorage.setItem(PROGRES_NOU_KEY, JSON.stringify(pendents));
+}
+
+async function enviarProgresNousPendents() {
+  const pendents = obtenirProgresNousPendents();
+  if (!pendents.length) return { ok: true };
+  const token = localStorage.getItem(GITHUB_TOKEN_KEY);
+  if (!token) return { ok: false, motiu: 'sense token configurat' };
+  const repo = obtenirRepoGithub();
+  const url = `https://api.github.com/repos/${repo}/contents/${PROGRES_NOU_PATH}`;
+  try {
+    let sha = null;
+    let remots = [];
+    const getResp = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    });
+    if (getResp.ok) {
+      const meta = await getResp.json();
+      sha = meta.sha;
+      if (meta.content) {
+        try {
+          const decodificat = decodeURIComponent(escape(atob(meta.content.replace(/\n/g, ''))));
+          const parsed = JSON.parse(decodificat);
+          if (Array.isArray(parsed)) remots = parsed;
+        } catch (e) { /* contingut il·legible -> es continua només amb els locals */ }
+      }
+    } else if (getResp.status !== 404) {
+      return { ok: false, motiu: `error llegint el fitxer (HTTP ${getResp.status})` };
+    }
+
+    // Fusió per client_id, mateix criteri que amb previsions/cites/pomodoros.
+    const clausRemots = new Set(remots.map(p => p.client_id));
+    const unio = remots.concat(pendents.filter(p => !clausRemots.has(p.client_id)));
+
+    const contingut = btoa(unescape(encodeURIComponent(JSON.stringify(unio))));
+    const body = { message: 'LEXAI Mòbil: progrés ràpid nou', content: contingut };
+    if (sha) body.sha = sha;
+    const putResp = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (putResp.ok) {
+      localStorage.removeItem(PROGRES_NOU_KEY);
+      return { ok: true };
+    }
+    let detall = '';
+    try {
+      const errJson = await putResp.json();
+      detall = errJson && errJson.message ? errJson.message : '';
+    } catch (e) { /* resposta sense JSON llegible */ }
+    return { ok: false, motiu: `HTTP ${putResp.status}${detall ? ' · ' + detall : ''}` };
+  } catch (e) {
+    return { ok: false, motiu: (e && e.message) ? e.message : 'error de xarxa' };
+  }
+}
+
 function obtenirComptadorAvui() {
   const avui = new Date().toISOString().slice(0, 10);
   try {
@@ -1152,6 +1226,135 @@ function _actualitzarPomodorosRestants(llibreActualitzat, paginaFinal) {
     llibreActualitzat.pomodoros_restants_anterior = valorAnterior;
   }
   llibreActualitzat.pomodoros_restants = nouValor;
+}
+
+// ── Progrés ràpid (targeta "Llegint" → botó "Progrés") ──────────────────────
+// A diferència d'un Focus, no hi ha cap cronòmetre ni cap sessió: només es
+// demana la pàgina final de lectura i, opcionalment, si el llibre s'ha
+// acabat. Reutilitza _actualitzarPomodorosRestants perquè els focus
+// pendents i la data de finalització es recalculin exactament igual que
+// després d'un Focus real -- però NO passa per registrarSessioPomodoro,
+// així que no es crea cap focus_sessio ni surt a l'historial/gràfiques.
+function mostrarModalProgresRapid(llibreId) {
+  const llibre = state.llibresEnCurs.find(l => l.id === llibreId);
+  if (!llibre) return;
+  const inicial = llibre.pagina_actual || 0;
+  let valor = inicial + 1;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-progres-rapid';
+  overlay.innerHTML = `
+    <div class="modal-caixa modal-pagina-final-caixa">
+      <div class="modal-titol">Afegir progrés</div>
+      <div class="modal-linia discreta">${escapeHtml(llibre.titol)} · actual: ${inicial}${llibre.pagines ? ' / ' + llibre.pagines : ''}</div>
+      <div class="pagina-final-stepper">
+        <button type="button" class="pagina-final-btn" id="pr-menys" aria-label="Una pàgina menys">−</button>
+        <div class="pagina-final-valor" id="pr-valor">${valor}</div>
+        <button type="button" class="pagina-final-btn" id="pr-mes" aria-label="Una pàgina més">+</button>
+      </div>
+      <div class="pagina-final-pct" id="pr-pct"></div>
+      <button type="button" class="pagina-final-mes10" id="pr-mes10">
+        ${icona('piles', 12)} +10 pàg.
+      </button>
+      <label class="pagina-final-check">
+        <input type="checkbox" id="pr-llibre-acabat">
+        Llibre finalitzat
+      </label>
+      <button type="button" id="pr-confirmar">Desar progrés</button>
+      <button type="button" id="pr-cancelar">Cancel·lar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const lblValor = overlay.querySelector('#pr-valor');
+  const lblPct = overlay.querySelector('#pr-pct');
+  const chkAcabat = overlay.querySelector('#pr-llibre-acabat');
+
+  function actualitzarPct() {
+    const fetes = Math.max(0, valor - inicial);
+    if (llibre.pagines) {
+      const pct = Math.max(0, Math.min(100, Math.round((valor / llibre.pagines) * 100)));
+      lblPct.textContent = `${pct}% del llibre · +${fetes} pàg. avui`;
+    } else {
+      lblPct.textContent = `+${fetes} pàg. avui`;
+    }
+  }
+  actualitzarPct();
+
+  overlay.querySelector('#pr-menys').addEventListener('click', () => {
+    valor = Math.max(0, valor - 1);
+    lblValor.textContent = valor;
+    actualitzarPct();
+  });
+  overlay.querySelector('#pr-mes').addEventListener('click', () => {
+    valor += 1;
+    lblValor.textContent = valor;
+    actualitzarPct();
+  });
+  overlay.querySelector('#pr-mes10').addEventListener('click', () => {
+    valor += 10;
+    lblValor.textContent = valor;
+    actualitzarPct();
+  });
+  // Marcar "Llibre finalitzat" salta la pàgina directament al total (com
+  // a l'escriptori); l'usuari encara la pot ajustar amb el stepper.
+  chkAcabat.addEventListener('change', () => {
+    if (chkAcabat.checked && llibre.pagines) {
+      valor = llibre.pagines;
+      lblValor.textContent = valor;
+      actualitzarPct();
+    }
+  });
+
+  overlay.querySelector('#pr-cancelar').addEventListener('click', () => {
+    document.body.removeChild(overlay);
+  });
+
+  overlay.querySelector('#pr-confirmar').addEventListener('click', () => {
+    if (valor <= inicial && !chkAcabat.checked) {
+      lblValor.style.color = 'var(--red)';
+      return;
+    }
+    const llibreAcabat = chkAcabat.checked;
+    document.body.removeChild(overlay);
+    progresRapidConfirmar(llibreId, valor, llibreAcabat);
+  });
+}
+
+function progresRapidConfirmar(llibreId, paginaFinal, llibreAcabat) {
+  const llibre = state.llibresEnCurs.find(l => l.id === llibreId);
+  if (!llibre) return;
+  const paginaInicial = llibre.pagina_actual || 0;
+  const ara = new Date();
+  const nova = {
+    client_id: `mob-progres-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    llibre_id: llibreId,
+    data: ara.toISOString().slice(0, 10),
+    hora: ara.toTimeString().slice(0, 8),
+    pagina_inicial: paginaInicial,
+    pagina_final: paginaFinal,
+    llibre_acabat: !!llibreAcabat,
+    creat_el: ara.toISOString(),
+  };
+
+  // Actualització optimista local -- mateix criteri que amb un Focus.
+  llibre.pagina_actual = paginaFinal;
+  if (llibreAcabat) {
+    // Ja no és "en curs": el traiem de la llista local. L'escriptori el
+    // marcarà 'Llegit' en importar aquest progrés.
+    state.llibresEnCurs = state.llibresEnCurs.filter(l => l.id !== llibreId);
+  } else {
+    _actualitzarPomodorosRestants(llibre, paginaFinal);
+  }
+  desarEstatLlibresEnCurs();
+
+  afegirProgresNouPendent(nova);
+  enviarProgresNousPendents(); // best-effort, no bloqueja
+
+  mostrarToast(llibreAcabat
+    ? '✓ Progrés desat i llibre marcat com a acabat.'
+    : '✓ Progrés desat (es sincronitzarà amb l\'escriptori).');
+  if (state.tab === 'pomodoro') renderPomodoro();
 }
 
 function pomoFinalitzarAnticipatConfirmar(paginaFinal, llibreAcabat) {
@@ -2359,27 +2562,36 @@ function renderPomodoro() {
                           l.pomodoros_restants_anterior !== l.pomodoros_restants;
       const esGrup = !!l.pomodoros_estimacio_grup;
       return `
-        <button class="card-llibre-pomo${seleccionat ? ' seleccionat' : ''}"
-                data-llibre-id="${l.id}" ${pomo.enCurs ? 'disabled' : ''}>
-          <div class="card-llibre-pomo-cos">
-            <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
-            ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
-            <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
-            <div class="card-llibre-pomo-linia2">
-              ${l.pag_per_pomodoro ? `<span class="card-llibre-pomo-proj">≈${l.pag_per_pomodoro} pàg/focus${esGrup ? ' *' : ''}</span>` : ''}
-              ${l.data_fi_estimada ? `<span class="card-llibre-pomo-fi">Fi prevista: ${formatData(l.data_fi_estimada)}</span>` : ''}
+        <div class="card-llibre-pomo${seleccionat ? ' seleccionat' : ''}">
+          <div class="card-llibre-pomo-top">
+            <div class="card-llibre-pomo-cos">
+              <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
+              ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
+              <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
+              <div class="card-llibre-pomo-linia2">
+                ${l.pag_per_pomodoro ? `<span class="card-llibre-pomo-proj">≈${l.pag_per_pomodoro} pàg/focus${esGrup ? ' *' : ''}</span>` : ''}
+                ${l.data_fi_estimada ? `<span class="card-llibre-pomo-fi">Fi prevista: ${formatData(l.data_fi_estimada)}</span>` : ''}
+              </div>
             </div>
+            ${teRestants ? `
+            <div class="card-llibre-pomo-restants${esGrup ? ' estimacio-grup' : ''}" title="${esGrup ? 'Estimació aproximada (encara sense focus propis d\u2019aquest llibre)' : 'Focus estimats per acabar el llibre'}">
+              <span class="card-llibre-pomo-restants-num">${l.pomodoros_restants}${esGrup ? '*' : ''}</span>
+              <span class="card-llibre-pomo-restants-lbl">focus</span>
+              ${teAnterior ? `
+              <div class="card-llibre-pomo-restants-sep"></div>
+              <span class="card-llibre-pomo-restants-ant" title="El que hi havia abans de l'últim focus fet">${l.pomodoros_restants_anterior}</span>
+              <span class="card-llibre-pomo-restants-ant-lbl">abans</span>` : ''}
+            </div>` : ''}
           </div>
-          ${teRestants ? `
-          <div class="card-llibre-pomo-restants${esGrup ? ' estimacio-grup' : ''}" title="${esGrup ? 'Estimació aproximada (encara sense focus propis d\u2019aquest llibre)' : 'Focus estimats per acabar el llibre'}">
-            <span class="card-llibre-pomo-restants-num">${l.pomodoros_restants}${esGrup ? '*' : ''}</span>
-            <span class="card-llibre-pomo-restants-lbl">focus</span>
-            ${teAnterior ? `
-            <div class="card-llibre-pomo-restants-sep"></div>
-            <span class="card-llibre-pomo-restants-ant" title="El que hi havia abans de l'últim focus fet">${l.pomodoros_restants_anterior}</span>
-            <span class="card-llibre-pomo-restants-ant-lbl">abans</span>` : ''}
-          </div>` : ''}
-        </button>`;
+          <div class="card-llibre-pomo-accions">
+            <button type="button" class="card-llibre-pomo-btn-focus" data-focus-id="${l.id}" ${pomo.enCurs ? 'disabled' : ''}>
+              ${icona('play', 13)}<span>Focus</span>
+            </button>
+            <button type="button" class="card-llibre-pomo-btn-progres" data-progres-id="${l.id}">
+              ${icona('progres', 13)}<span>Progrés</span>
+            </button>
+          </div>
+        </div>`;
     }).join('');
     seccioLlibres = `
       <div class="seccio-titol" style="color:var(--text-label); margin-top:20px;">
@@ -2434,8 +2646,11 @@ function renderPomodoro() {
     });
   }
 
-  main.querySelectorAll('[data-llibre-id]').forEach(btn => {
-    btn.addEventListener('click', () => pomoTriarLlibre(parseInt(btn.getAttribute('data-llibre-id'), 10)));
+  main.querySelectorAll('[data-focus-id]').forEach(btn => {
+    btn.addEventListener('click', () => pomoTriarLlibre(parseInt(btn.getAttribute('data-focus-id'), 10)));
+  });
+  main.querySelectorAll('[data-progres-id]').forEach(btn => {
+    btn.addEventListener('click', () => mostrarModalProgresRapid(parseInt(btn.getAttribute('data-progres-id'), 10)));
   });
 
   const bPlay = document.getElementById('pomo-play');
