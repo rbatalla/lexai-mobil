@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -2478,21 +2478,19 @@ function renderPomodoro() {
           ${!pomo.enCurs || pomo.pausat
             ? `<button class="pomo-btn-gran" id="pomo-play">${icona('play', 22)}</button>`
             : `<button class="pomo-btn-gran" id="pomo-pausa">${icona('pausa', 19)}</button>`}
-          <div class="pomo-controls-fila-baixa">
-            <button class="pomo-btn-mitja" id="pomo-stop"
-                    ${(!pomo.enCurs && !pomo.llibreId) ? 'disabled' : ''}
-                    title="${pomo.enCurs
-                      ? (pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar')
-                      : 'Treure la selecció del llibre'}">${icona('stop', 15)}</button>
-            ${(pomo.tipus === 'treball' && pomo.enCurs) ? `
-              <button class="pomo-btn-mitja pomo-btn-ampliar" id="pomo-ampliar"
-                      title="Ampliar aquest focus 25 min més (un sol registre)">${icona('ampliar', 15)}</button>
-            ` : ''}
-            ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
-              <button class="pomo-btn-mitja pomo-btn-finalitzar" id="pomo-finalitzar"
-                      title="Finalitzar aquest focus ara (parcial)">${icona('bandera', 14)}</button>
-            ` : ''}
-          </div>
+          <button class="pomo-btn-mitja" id="pomo-stop"
+                  ${(!pomo.enCurs && !pomo.llibreId) ? 'disabled' : ''}
+                  title="${pomo.enCurs
+                    ? (pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar')
+                    : 'Treure la selecció del llibre'}">${icona('stop', 15)}</button>
+          ${(pomo.tipus === 'treball' && pomo.enCurs) ? `
+            <button class="pomo-btn-mitja pomo-btn-ampliar" id="pomo-ampliar"
+                    title="Ampliar aquest focus 25 min més (un sol registre)">${icona('ampliar', 15)}</button>
+          ` : ''}
+          ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
+            <button class="pomo-btn-mitja pomo-btn-finalitzar" id="pomo-finalitzar"
+                    title="Finalitzar aquest focus ara (parcial)">${icona('bandera', 14)}</button>
+          ` : ''}
         </div>
       </div>`;
   }
@@ -2503,21 +2501,6 @@ function renderPomodoro() {
     ? pomo.paginaInicial
     : (llibreSeleccionat ? (llibreSeleccionat.pagina_actual || 0) : 0);
 
-  let projeccioHtml = '';
-  if (llibreSeleccionat && typeof llibreSeleccionat.pomodoros_restants === 'number') {
-    // Mateix valor exacte que el badge de la targeta (_actualitzarPomodorosRestants
-    // és l'única font de veritat) -- ja no es recalcula aquí per separat.
-    const ajustat = !!llibreSeleccionat.pomodorosAjustat;
-    // pomodoros_estimacio_grup: el llibre encara no té cap pomodoro propi i
-    // el valor ve del promig de categoria/global (mateix criteri visual que
-    // "es_estimacio_grup" a l'escriptori: marcat com a aproximació, no dada
-    // pròpia del llibre).
-    const esGrup = !!llibreSeleccionat.pomodoros_estimacio_grup;
-    projeccioHtml = `<div class="pomo-projeccio${ajustat ? ' ajustat' : ''}${esGrup ? ' estimacio-grup' : ''}">
-        ~${llibreSeleccionat.pomodoros_restants} focus per acabar${ajustat ? ' (ajustat)' : ''}${esGrup ? ' *' : ''}
-      </div>`;
-  }
-
   const cobertaHtml = (llibreSeleccionat && llibreSeleccionat.coberta_base64)
     ? `<img class="pomo-llibre-coberta" src="data:image/jpeg;base64,${llibreSeleccionat.coberta_base64}" alt="">`
     : '';
@@ -2526,16 +2509,17 @@ function renderPomodoro() {
     ? `<div class="pomo-llibre-fixa">
          ${cobertaHtml}
          <div class="pomo-llibre-fixa-dreta">
-           <div class="pomo-llibre-pag-fila">
-             ${icona('llibre', 14)}
+           <div class="pomo-llibre-titol-fila">
+             ${icona('llibre', 13)}
              <span class="titol">${escapeHtml(pomo.llibreTitol)}</span>
-             <label class="sep" for="pomo-pagina-inicial">· pàg.</label>
+           </div>
+           <div class="pomo-llibre-pag-fila">
+             <label class="sep" for="pomo-pagina-inicial">Pàg.</label>
              <input type="number" id="pomo-pagina-inicial" min="0"
                     value="${paginaMostrada}" ${pomo.enCurs ? 'disabled' : ''}>
              <button type="button" id="pomo-pagina-inicial-mes" aria-label="Sumar una pàgina"
                      ${pomo.enCurs ? 'disabled' : ''}>+</button>
            </div>
-           ${projeccioHtml}
          </div>
        </div>`
     : '';
