@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.12.1';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -70,6 +70,53 @@ const FOTOS_NOVES_KEY = 'lexaiMobil_fotos_noves_v1';
 // pujar-se bé (abans que l'escriptori la importés i el catàleg tornés a
 // baixar amb la informació actualitzada).
 const FOTOS_FETES_LOCAL_KEY = 'lexaiMobil_fotos_fetes_local_v1';
+
+// Registre temporal de "estava fent una foto d'aquest llibre/tipus" -- es
+// desa a localStorage (no a memòria) JUST ABANS d'obrir la càmera del
+// sistema. Motiu: en molts Android, la PRIMERA vegada que una pàgina
+// demana permís de càmera, el sistema operatiu descarrega la pestanya/PWA
+// de memòria mentre es mostra el diàleg de permís + la càmera -- en
+// tornar, la pàgina es recarrega de zero (es perd fotoFlow i el modal es
+// veu tancat, com si hagués "fet fora" de la funcionalitat). A partir de
+// la segona vegada el permís ja està concedit i no torna a passar. No es
+// pot evitar la recàrrega des de JS, però sí recuperar el llibre/tipus en
+// tornar perquè no calgui repetir la cerca.
+const FOTO_FLUX_PENDENT_KEY = 'lexaiMobil_foto_flux_pendent_v1';
+function desarFotoFluxPendent() {
+  if (!fotoFlow || !fotoFlow.llibreId || !fotoFlow.tipus) return;
+  try {
+    localStorage.setItem(FOTO_FLUX_PENDENT_KEY, JSON.stringify({
+      llibreId: fotoFlow.llibreId,
+      llibreTitol: fotoFlow.llibreTitol,
+      tipus: fotoFlow.tipus,
+      existents: [...(fotoFlow.existents || [])],
+    }));
+  } catch (e) { /* ignorable */ }
+}
+function netejarFotoFluxPendent() {
+  try { localStorage.removeItem(FOTO_FLUX_PENDENT_KEY); } catch (e) { /* ignorable */ }
+}
+function recuperarFotoFluxPendentSiCal() {
+  let raw;
+  try { raw = localStorage.getItem(FOTO_FLUX_PENDENT_KEY); } catch (e) { return; }
+  if (!raw) return;
+  netejarFotoFluxPendent();
+  let dades;
+  try { dades = JSON.parse(raw); } catch (e) { return; }
+  if (!dades || !dades.llibreId || !dades.tipus) return;
+  // No es pot reobrir la càmera sola (cal un gest de l'usuari), però sí
+  // deixar-lo directament al pas "tipus" amb el mateix llibre ja triat,
+  // perquè només calgui tornar a tocar el tipus de foto -- sense repetir
+  // la cerca.
+  fotoFlow = {
+    pas: 'tipus', llibreId: dades.llibreId, llibreTitol: dades.llibreTitol,
+    tipus: null, assignats: new Set(), existents: new Set(dades.existents || []),
+  };
+  document.getElementById('modal-foto-llibre').classList.remove('oculta');
+  fotoRenderPasTipus();
+  fotoAnarPas('tipus');
+  mostrarToast('El mòbil ha reiniciat la pàgina en obrir la càmera (només passa el primer cop). Torna a triar el tipus de foto.');
+}
 
 function obtenirFotosFetesLocal() {
   try {
@@ -2824,6 +2871,7 @@ function tancarFluxFoto() {
   document.getElementById('modal-foto-llibre').classList.add('oculta');
   fotoFlow = null;
   _fotoDragOrigin = null;
+  netejarFotoFluxPendent();
 }
 
 function fotoAnarPas(pas) {
@@ -2930,6 +2978,7 @@ function fotoRenderPasTipus() {
         return;
       }
       fotoFlow.tipus = tk;
+      desarFotoFluxPendent();
       document.getElementById('input-foto-llibre').click();
     });
   });
@@ -2971,6 +3020,7 @@ function onFotoFitxerSeleccionat(ev) {
   const file = ev.target.files && ev.target.files[0];
   ev.target.value = ''; // permetre re-seleccionar/repetir la mateixa foto
   if (!file || !fotoFlow) return;
+  netejarFotoFluxPendent(); // el flux ha sobreviscut, ja no cal el marcador
   const reader = new FileReader();
   reader.onload = (e) => {
     const img = new Image();
@@ -3336,6 +3386,7 @@ function init() {
   document.getElementById('foto-cerca-input').addEventListener('input', (e) => fotoRenderResultatsCerca(e.target.value));
   document.getElementById('input-foto-llibre').addEventListener('change', onFotoFitxerSeleccionat);
   document.getElementById('btn-foto-repetir').addEventListener('click', () => {
+    desarFotoFluxPendent();
     document.getElementById('input-foto-llibre').click();
   });
   document.getElementById('btn-foto-confirmar').addEventListener('click', fotoConfirmar);
@@ -3357,6 +3408,7 @@ function init() {
   }
 
   comprovarResultatActualitzacio();
+  recuperarFotoFluxPendentSiCal();
 
   // Pujada automàtica de pomodoros pendents: cada cop que l'app passa a
   // segon pla o es tanca ("cada cop que es tanca/actualitza l'app").
