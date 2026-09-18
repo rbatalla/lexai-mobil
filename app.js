@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.12.1';
+const APP_VERSION = '1.12.2';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -2499,6 +2499,11 @@ function renderPomodoro() {
     `<span style="display:inline-block; width:9px; height:9px; border-radius:50%; margin:0 3px;
        background:${i < pomo.cicleNum ? 'var(--orange)' : 'var(--border-lt)'};"></span>`).join('');
 
+  // Ampliar/Finalitzar sempre existeixen (mateixa posició); només s'activen
+  // quan toca. Així els controls no es reubiquen en començar/aturar el focus.
+  const ampliarActiu = pomo.tipus === 'treball' && pomo.enCurs;
+  const finalitzarActiu = ampliarActiu && !!pomo.llibreId;
+
   let contingutCentral;
   if (pomo.esperantConfirmacio) {
     const acabatTreball = pomo.tipus === 'treball';
@@ -2515,10 +2520,6 @@ function renderPomodoro() {
       </div>`;
   } else {
     contingutCentral = `
-      <div class="pomo-tipus-punts">
-        <span class="pomo-tipus" style="color:${colorTipus};">${etiquetaTipus}</span>
-        <span class="pomo-punts">${punts}</span>
-      </div>
       <div class="pomo-rellotge-controls">
         <div class="pomo-temps">${formatTemps(pomo.enCurs ? pomo.restant : (pomo.tipus === 'treball' ? cfg.durada_treball : cfg.durada_descans))}</div>
         <div class="pomo-controls">
@@ -2530,14 +2531,12 @@ function renderPomodoro() {
                   title="${pomo.enCurs
                     ? (pomo.tipus === 'descans' ? 'Cancel·lar descans' : 'Aturar')
                     : 'Treure la selecció del llibre'}">${icona('stop', 15)}</button>
-          ${(pomo.tipus === 'treball' && pomo.enCurs) ? `
-            <button class="pomo-btn-mitja pomo-btn-ampliar" id="pomo-ampliar"
-                    title="Ampliar aquest focus 25 min més (un sol registre)">${icona('ampliar', 15)}</button>
-          ` : ''}
-          ${(pomo.tipus === 'treball' && pomo.enCurs && pomo.llibreId) ? `
-            <button class="pomo-btn-mitja pomo-btn-finalitzar" id="pomo-finalitzar"
-                    title="Finalitzar aquest focus ara (parcial)">${icona('bandera', 14)}</button>
-          ` : ''}
+          <button class="pomo-btn-mitja pomo-btn-ampliar" id="pomo-ampliar"
+                  ${ampliarActiu ? '' : 'disabled'}
+                  title="Ampliar aquest focus 25 min més (un sol registre)">${icona('ampliar', 15)}</button>
+          <button class="pomo-btn-mitja pomo-btn-finalitzar" id="pomo-finalitzar"
+                  ${finalitzarActiu ? '' : 'disabled'}
+                  title="Finalitzar aquest focus ara (parcial)">${icona('bandera', 14)}</button>
         </div>
       </div>`;
   }
@@ -2550,26 +2549,27 @@ function renderPomodoro() {
 
   const cobertaHtml = (llibreSeleccionat && llibreSeleccionat.coberta_base64)
     ? `<img class="pomo-llibre-coberta" src="data:image/jpeg;base64,${llibreSeleccionat.coberta_base64}" alt="">`
-    : '';
+    : `<div class="pomo-llibre-coberta pomo-llibre-coberta-buida${pomo.llibreId ? '' : ' sense-llibre'}">${icona('llibre', 28)}</div>`;
 
-  const llibreActualHtml = pomo.llibreId
-    ? `<div class="pomo-llibre-fixa">
+  // L'estructura del bloc del llibre és SEMPRE la mateixa (coberta o marcador,
+  // títol, pàgina inicial), amb o sense coberta i amb o sense llibre triat.
+  const paginaBloquejada = pomo.enCurs || !pomo.llibreId;
+  const llibreActualHtml = `<div class="pomo-llibre-fixa">
          ${cobertaHtml}
          <div class="pomo-llibre-fixa-dreta">
-           <div class="pomo-llibre-titol-fila">
+           <div class="pomo-llibre-titol-fila${pomo.llibreId ? '' : ' sense-llibre'}">
              ${icona('llibre', 13)}
-             <span class="titol">${escapeHtml(pomo.llibreTitol)}</span>
+             <span class="titol">${pomo.llibreId ? escapeHtml(pomo.llibreTitol) : 'Cap llibre seleccionat'}</span>
            </div>
            <div class="pomo-llibre-pag-fila">
              <label class="sep" for="pomo-pagina-inicial">Pàg.</label>
              <input type="number" id="pomo-pagina-inicial" min="0"
-                    value="${paginaMostrada}" ${pomo.enCurs ? 'disabled' : ''}>
+                    value="${paginaMostrada}" ${paginaBloquejada ? 'disabled' : ''}>
              <button type="button" id="pomo-pagina-inicial-mes" aria-label="Sumar una pàgina"
-                     ${pomo.enCurs ? 'disabled' : ''}>+</button>
+                     ${paginaBloquejada ? 'disabled' : ''}>+</button>
            </div>
          </div>
-       </div>`
-    : '';
+       </div>`;
 
   let seccioLlibres = '';
   if (state.llibresEnCurs.length) {
@@ -2641,16 +2641,18 @@ function renderPomodoro() {
   main.innerHTML = `
     <div class="pomo-vista" id="pomo-vista">
       <div class="pomo-top-fix">
-        <div class="pomo-header">
-          <div class="pomo-header-titol">Focus
-            <span class="pomo-comptador-avui">${obtenirComptadorAvui()} avui</span>
-          </div>
-          <div style="display:flex; gap:8px;">
-            <button class="btn-icon" id="pomo-btn-pujar" title="Pujar focus pendents ara">${icona('pujar', 18)}</button>
-            <button class="btn-icon" id="pomo-btn-config" title="Configuració del Focus">${icona('config', 18)}</button>
-          </div>
-        </div>
         <div class="pomo-caixa">
+          <div class="pomo-caixa-cap">
+            <div class="pomo-caixa-cap-esq">
+              <span class="pomo-tipus" style="color:${colorTipus};">${etiquetaTipus}</span>
+              <span class="pomo-punts">${punts}</span>
+              <span class="pomo-comptador-avui">${obtenirComptadorAvui()} avui</span>
+            </div>
+            <div class="pomo-caixa-cap-dreta">
+              <button class="btn-icon" id="pomo-btn-pujar" title="Pujar focus pendents ara">${icona('pujar', 18)}</button>
+              <button class="btn-icon" id="pomo-btn-config" title="Configuració del Focus">${icona('config', 18)}</button>
+            </div>
+          </div>
           ${llibreActualHtml}
           ${contingutCentral}
         </div>
