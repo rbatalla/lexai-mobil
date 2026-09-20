@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.12.2';
+const APP_VERSION = '1.12.3';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -61,6 +61,10 @@ const CITES_NOVES_PATH = 'data/lexai_mobil_cites_noves.json';
 const CITES_NOVES_KEY = 'lexaiMobil_cites_noves_v1';
 const PROGRES_NOU_PATH = 'data/lexai_mobil_progres_nous.json';
 const PROGRES_NOU_KEY = 'lexaiMobil_progres_nous_v1';
+// Progressos ràpids ja aplicats en local però que l'escriptori encara no ha
+// importat: es re-apliquen en cada "Actualitzar des de GitHub" perquè la
+// pàgina no torni enrere (l'escriptori encara exporta la pàgina vella).
+const PROGRES_APLICATS_KEY = 'lexaiMobil_progres_aplicats_v1';
 const FOTOS_NOVES_PATH = 'data/lexai_mobil_imatges_noves.json';
 const FOTOS_NOVES_KEY = 'lexaiMobil_fotos_noves_v1';
 // Registre PERSISTENT (mai s'esborra en pujar-se) de quins tipus de foto
@@ -774,6 +778,54 @@ function afegirProgresNouPendent(progres) {
   localStorage.setItem(PROGRES_NOU_KEY, JSON.stringify(pendents));
 }
 
+function obtenirProgresAplicats() {
+  try {
+    const raw = localStorage.getItem(PROGRES_APLICATS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function desarProgresAplicats(llista) {
+  try { localStorage.setItem(PROGRES_APLICATS_KEY, JSON.stringify(llista)); } catch (e) { /* sense espai */ }
+}
+function afegirProgresAplicat(p) {
+  const llista = obtenirProgresAplicats();
+  llista.push({
+    client_id: p.client_id, llibre_id: p.llibre_id, pagina_final: p.pagina_final,
+    llibre_acabat: !!p.llibre_acabat, creat_el: p.creat_el,
+  });
+  desarProgresAplicats(llista);
+}
+
+// Re-aplica sobre `llibres` (rebuts de GitHub) els progressos ràpids fets al
+// mòbil que l'escriptori encara no ha importat. Un progrés es dóna per
+// confirmat (i s'esborra d'aquí) quan la llista rebuda ja el reflecteix:
+// pàgina >= pàgina final, o el llibre acabat ja no surt com a "en curs".
+// Caduca als 30 dies per no arrossegar-ne mai de vells.
+function _reaplicarProgresLocals(llibres) {
+  const aplicats = obtenirProgresAplicats();
+  if (!aplicats.length) return llibres;
+  const limit = Date.now() - 30 * 24 * 3600 * 1000;
+  const manten = [];
+  let resultat = llibres.slice();
+  aplicats.sort((a, b) => String(a.creat_el).localeCompare(String(b.creat_el)));
+  for (const a of aplicats) {
+    if (new Date(a.creat_el).getTime() < limit) continue;
+    const idx = resultat.findIndex(l => l.id === a.llibre_id);
+    if (idx < 0) continue;  // acabat i ja confirmat, o ja no és en curs
+    if (a.llibre_acabat) {
+      resultat.splice(idx, 1);  // l'escriptori encara no l'ha marcat com a Llegit
+      manten.push(a);
+    } else if ((resultat[idx].pagina_actual || 0) < a.pagina_final) {
+      resultat[idx].pagina_actual = a.pagina_final;
+      _actualitzarPomodorosRestants(resultat[idx], a.pagina_final);
+      manten.push(a);
+    }
+    // altrament: l'escriptori ja el té -> confirmat, no es manté
+  }
+  desarProgresAplicats(manten);
+  return resultat;
+}
+
 async function enviarProgresNousPendents() {
   const pendents = obtenirProgresNousPendents();
   if (!pendents.length) return { ok: true };
@@ -1396,7 +1448,17 @@ function progresRapidConfirmar(llibreId, paginaFinal, llibreAcabat) {
   desarEstatLlibresEnCurs();
 
   afegirProgresNouPendent(nova);
-  enviarProgresNousPendents(); // best-effort, no bloqueja
+  afegirProgresAplicat(nova);
+  // Pujada a GitHub amb feedback: abans fallava en silenci (sense token,
+  // sense xarxa...) i el progrés es quedava només al mòbil.
+  enviarProgresNousPendents().then((res) => {
+    if (res && res.ok) {
+      mostrarToast('✓ Progrés pujat a GitHub.');
+    } else {
+      const motiu = (res && res.motiu) ? res.motiu : 'motiu desconegut';
+      mostrarToast(`Progrés desat al mòbil, però no s'ha pogut pujar: ${motiu} -- es reintentarà.`);
+    }
+  });
 
   mostrarToast(llibreAcabat
     ? '✓ Progrés desat i llibre marcat com a acabat.'
@@ -1627,6 +1689,9 @@ function aplicarNovesDades(previsionsRows, extra, meta) {
         ? { ...l, pomodoros_restants_anterior: anteriorsPerId[l.id] }
         : l
     ));
+    // Progressos ràpids del mòbil que l'escriptori encara no ha importat:
+    // es re-apliquen perquè la pàgina no torni enrere.
+    llibresEnCursNous = _reaplicarProgresLocals(llibresEnCursNous);
   }
   const noves = {
     previsions: previsionsRows,
@@ -1701,6 +1766,7 @@ async function actualitzarDesDeGithub() {
   enviarPrevisionsNovesPendents();
   enviarCitesNovesPendents();
   enviarFotosNovesPendents();
+  enviarProgresNousPendents();
 
   aplicarNovesDades(rows, {
     sagues: Array.isArray(dades.sagues) ? dades.sagues : [],
@@ -3420,6 +3486,7 @@ function init() {
       enviarPrevisionsNovesPendents();
       enviarCitesNovesPendents();
       enviarFotosNovesPendents();
+      enviarProgresNousPendents();
     } else if (pomo.enCurs && !pomo.pausat) {
       // El navegador allibera el Wake Lock sol quan la pantalla es bloqueja;
       // cal tornar-lo a demanar en tornar a l'app si el focus segueix actiu.
@@ -3431,6 +3498,7 @@ function init() {
     enviarPrevisionsNovesPendents();
     enviarCitesNovesPendents();
     enviarFotosNovesPendents();
+    enviarProgresNousPendents();
   });
 
   window.addEventListener('resize', () => {
