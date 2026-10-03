@@ -38,6 +38,19 @@ const ICONES = {
   progres: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h6"/><line x1="16" y1="4" x2="22" y2="4"/><line x1="19" y1="1" x2="19" y2="7"/>',
 };
 
+// Total de pàgines "correcte" d'un llibre segons com s'està llegint: si
+// la lectura és digital i es coneix el total electrònic, es fa servir
+// aquest (pagina_actual ja ve en unitats natives, electròniques si
+// digital -- no cal cap traducció aquí, només triar bé el denominador).
+// Si no, el total físic de sempre (llibre.pagines).
+function totalPaginesLlibre(llibre) {
+  if (!llibre) return 0;
+  if (llibre.format === 'digital' && llibre.pagines_electroniques) {
+    return llibre.pagines_electroniques;
+  }
+  return llibre.pagines || 0;
+}
+
 function icona(nom, mida) {
   mida = mida || 20;
   return `<svg width="${mida}" height="${mida}" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
@@ -1308,7 +1321,7 @@ function _actualitzarPomodorosRestants(llibreActualitzat, paginaFinal) {
   const valorAnterior = llibreActualitzat.pomodoros_restants;
   let nouValor = null;
   if (llibreActualitzat.pag_per_pomodoro && llibreActualitzat.pagines) {
-    const pagRestants = Math.max(0, llibreActualitzat.pagines - paginaFinal);
+    const pagRestants = Math.max(0, totalPaginesLlibre(llibreActualitzat) - paginaFinal);
     nouValor = Math.ceil(pagRestants / llibreActualitzat.pag_per_pomodoro);
   } else if (typeof valorAnterior === 'number') {
     // Sense ritme propi conegut encara: descompte simple, mai és "ajust".
@@ -1338,6 +1351,7 @@ function mostrarModalProgresRapid(llibreId) {
   const llibre = state.llibresEnCurs.find(l => l.id === llibreId);
   if (!llibre) return;
   const inicial = llibre.pagina_actual || 0;
+  const totalPag = totalPaginesLlibre(llibre);
   let valor = inicial + 1;
 
   const overlay = document.createElement('div');
@@ -1346,7 +1360,7 @@ function mostrarModalProgresRapid(llibreId) {
   overlay.innerHTML = `
     <div class="modal-caixa modal-pagina-final-caixa">
       <div class="modal-titol">Afegir progrés</div>
-      <div class="modal-linia discreta">${escapeHtml(llibre.titol)} · actual: ${inicial}${llibre.pagines ? ' / ' + llibre.pagines : ''}</div>
+      <div class="modal-linia discreta">${escapeHtml(llibre.titol)} · actual: ${inicial}${totalPag ? ' / ' + totalPag : ''}</div>
       <div class="pagina-final-stepper">
         <button type="button" class="pagina-final-btn" id="pr-menys" aria-label="Una pàgina menys">−</button>
         <div class="pagina-final-valor" id="pr-valor">${valor}</div>
@@ -1371,8 +1385,8 @@ function mostrarModalProgresRapid(llibreId) {
 
   function actualitzarPct() {
     const fetes = Math.max(0, valor - inicial);
-    if (llibre.pagines) {
-      const pct = Math.max(0, Math.min(100, Math.round((valor / llibre.pagines) * 100)));
+    if (totalPag) {
+      const pct = Math.max(0, Math.min(100, Math.round((valor / totalPag) * 100)));
       lblPct.textContent = `${pct}% del llibre · +${fetes} pàg. avui`;
     } else {
       lblPct.textContent = `+${fetes} pàg. avui`;
@@ -1398,8 +1412,8 @@ function mostrarModalProgresRapid(llibreId) {
   // Marcar "Llibre finalitzat" salta la pàgina directament al total (com
   // a l'escriptori); l'usuari encara la pot ajustar amb el stepper.
   chkAcabat.addEventListener('change', () => {
-    if (chkAcabat.checked && llibre.pagines) {
-      valor = llibre.pagines;
+    if (chkAcabat.checked && totalPag) {
+      valor = totalPag;
       lblValor.textContent = valor;
       actualitzarPct();
     }
@@ -2653,7 +2667,8 @@ function renderPomodoro() {
     });
     const cards = llibresOrdenats.map(l => {
       const seleccionat = l.id === pomo.llibreId;
-      const pct = l.pagines ? Math.min(100, Math.round((l.pagina_actual / l.pagines) * 100)) : null;
+      const totalPagL = totalPaginesLlibre(l);
+      const pct = totalPagL ? Math.min(100, Math.round((l.pagina_actual / totalPagL) * 100)) : null;
       const teRestants = typeof l.pomodoros_restants === 'number';
       const teAnterior = typeof l.pomodoros_restants_anterior === 'number' &&
                           l.pomodoros_restants_anterior !== l.pomodoros_restants;
@@ -2664,7 +2679,7 @@ function renderPomodoro() {
             <div class="card-llibre-pomo-cos">
               <div class="card-llibre-pomo-titol">${escapeHtml(l.titol)}</div>
               ${l.autor ? `<div class="card-llibre-pomo-autor">${escapeHtml(l.autor)}</div>` : ''}
-              <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${l.pagines ? ' / ' + l.pagines : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
+              <div class="card-llibre-pomo-pag">${l.pagina_actual || 0}${totalPagL ? ' / ' + totalPagL : ''} pàg.${pct !== null ? ' · ' + pct + '%' : ''}</div>
               <div class="card-llibre-pomo-linia2">
                 ${l.pag_per_pomodoro ? `<span class="card-llibre-pomo-proj">≈${l.pag_per_pomodoro} pàg/focus${esGrup ? ' *' : ''}</span>` : ''}
                 ${l.data_fi_estimada ? `<span class="card-llibre-pomo-fi">Fi prevista: ${formatData(l.data_fi_estimada)}</span>` : ''}
