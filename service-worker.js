@@ -2,12 +2,12 @@
 // Cache de l'aplicació (shell) perquè funcioni sense connexió un cop carregada.
 // Les dades (previsions importades) viuen a localStorage, no aquí.
 
-const CACHE_NAME = 'lexai-mobil-v64';
+const CACHE_NAME = 'lexai-mobil-v65';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=201',
-  './app.js?v=201',
+  './styles.css?v=202',
+  './app.js?v=202',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',

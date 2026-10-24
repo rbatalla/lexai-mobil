@@ -2,7 +2,7 @@
 // Dades: importades des d'un CSV generat per LEXAI (Manteniment > Exportar per LEXAI Mòbil).
 // Es guarden a localStorage. Cada nova importació REEMPLAÇA totalment les dades anteriors.
 
-const APP_VERSION = '1.12.3';
+const APP_VERSION = '1.12.4';
 
 // ── Icones planes, un sol color (currentColor), sense emojis ──────────────
 const ICONES = {
@@ -1750,14 +1750,38 @@ function importarCSV(text) {
   });
 }
 
+// Descarrega el JSON de dades. raw.githubusercontent.com serveix les
+// respostes amb una cache de ~5 min (max-age=300) que el navegador no pot
+// saltar-se, així que després d'una pujada el mòbil podia veure encara la
+// versió anterior. L'API de contingut de GitHub no passa per aquesta
+// cache: la fem servir primer i, si falla (xarxa, límit de 60 peticions/h
+// sense token...), tornem a l'adreça raw com abans.
+async function descarregarJsonGithub(url) {
+  const m = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+?)(?:\?.*)?$/.exec(url);
+  if (m) {
+    try {
+      const apiUrl = `https://api.github.com/repos/${m[1]}/${m[2]}/contents/${m[4]}?ref=${m[3]}`;
+      const r = await fetch(apiUrl, {
+        cache: 'no-store',
+        headers: { 'Accept': 'application/vnd.github.raw+json' },
+      });
+      if (r.ok) return await r.json();
+      console.warn('API de GitHub: HTTP', r.status, '— provant l\'adreça raw');
+    } catch (e) {
+      console.warn('API de GitHub no disponible, provant l\'adreça raw:', e);
+    }
+  }
+  const resp = await fetch(url, { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return await resp.json();
+}
+
 async function actualitzarDesDeGithub() {
   const url = obtenirUrlGithub();
   mostrarToast('Descarregant des de GitHub...');
   let dades;
   try {
-    const resp = await fetch(url, { cache: 'no-store' });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    dades = await resp.json();
+    dades = await descarregarJsonGithub(url);
   } catch (e) {
     console.error('Error descarregant de GitHub:', e);
     mostrarToast('No s\'ha pogut descarregar el fitxer. Comprova l\'adreça i la connexió.');
